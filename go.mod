@@ -8,9 +8,9 @@ require (
 	github.com/onsi/ginkgo/v2 v2.22.2
 	github.com/onsi/gomega v1.36.2
 	github.com/tektoncd/pipeline v0.68.0
-	k8s.io/api v0.32.2
-	k8s.io/apimachinery v0.32.2
-	k8s.io/client-go v0.32.2
+	k8s.io/api v0.32.3
+	k8s.io/apimachinery v0.32.3
+	k8s.io/client-go v0.32.3
 	knative.dev/pkg v0.0.0-20250219013713-9e265611c097
 	sigs.k8s.io/controller-runtime v0.20.2
 	sigs.k8s.io/kueue v0.10.1
