@@ -12,7 +12,7 @@ require (
 	k8s.io/apimachinery v0.32.2
 	k8s.io/client-go v0.32.2
 	knative.dev/pkg v0.0.0-20250219013713-9e265611c097
-	sigs.k8s.io/controller-runtime v0.20.2
+	sigs.k8s.io/controller-runtime v0.20.4
 	sigs.k8s.io/kueue v0.10.1
 )
 
