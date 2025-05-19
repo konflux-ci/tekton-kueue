@@ -12,16 +12,24 @@ metadata:
 spec:
   namespaceSelector: {}
   queueingStrategy: BestEffortFIFO
+  admissionChecks:
+    - static-admission
   resourceGroups:
-  - coveredResources: ["cpu", "memory", "tekton.dev/pipelineruns"]
+  - coveredResources:
+    - "memory"
+    - "tekton.dev/pipelineruns"
+    - "ppc64-small"
+    - "arm64-small"
     flavors:
     - name: "default-flavor"
       resources:
-      - name: "cpu"
-        nominalQuota: 2
       - name: "memory"
         nominalQuota: 1Gi
       - name: "tekton.dev/pipelineruns"
+        nominalQuota: 3
+      - name: "ppc64-small"
+        nominalQuota: 2
+      - name: "arm64-small"
         nominalQuota: 2
 ---
 apiVersion: kueue.x-k8s.io/v1beta1

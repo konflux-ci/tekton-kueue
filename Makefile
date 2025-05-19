@@ -245,6 +245,11 @@ cert-manager:
 	$(KUBECTL) apply --server-side -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
 	$(KUBECTL) wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 
+.PHONY: kueue-external-admission
+kueue-external-admission:
+	$(KUBECTL) apply --server-side -k hack/kueue-external-admission
+	$(KUBECTL) wait --for=condition=Available deployment --all -n kueue-external-admission --timeout=300s
+
 .PHONY: cert-manager-undeploy
 cert-manager-undeploy:
 	$(KUBECTL) delete -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
