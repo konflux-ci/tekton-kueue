@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -368,7 +369,7 @@ func addReadyAndHealthChecksToMgrOrDie(mgr manager.Manager) {
 }
 
 func addRunnableOrDie(mgr ctrl.Manager, runnable manager.Runnable, infoMsg, errMsg string) {
-	if runnable == nil {
+	if reflect.ValueOf(runnable).IsNil() {
 		return
 	}
 	setupLog.Info(infoMsg)

@@ -20,3 +20,4 @@ namespace:
   group: admissionregistration.k8s.io
   path: webhooks/clientConfig/service/namespace
   create: true
+

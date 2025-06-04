@@ -1,33 +1,25 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    control-plane: controller-manager
-    app.kubernetes.io/name: tekton-kueue
-    app.kubernetes.io/managed-by: kustomize
-  name: system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: controller-manager
+  name: webhook
   namespace: system
   labels:
-    control-plane: controller-manager
+    control-plane: controller-manager-webhook
     app.kubernetes.io/name: tekton-kueue
     app.kubernetes.io/managed-by: kustomize
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      control-plane: controller-manager-webhook
       app.kubernetes.io/name: tekton-kueue
   replicas: 1
   template:
     metadata:
       annotations:
-        kubectl.kubernetes.io/default-container: manager
+        kubectl.kubernetes.io/default-container: webhook
       labels:
-        control-plane: controller-manager
+        control-plane: controller-manager-webhook
         app.kubernetes.io/name: tekton-kueue
     spec:
       securityContext:
@@ -38,13 +30,15 @@ spec:
       - command:
         - /manager
         args:
-          - controller
-          - --leader-elect
+          - webhook
           - --health-probe-bind-address=:8081
-          - --metrics-bind-address=:8443
+          - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         image: controller:latest
         name: manager
         ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
         - containerPort: 8443
           name: metrics-server
           protocol: TCP
@@ -73,7 +67,13 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-        volumeMounts: []
-      volumes: []
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-certs
+          readOnly: true
+      volumes:
+      - name: webhook-certs
+        secret:
+          secretName: webhook-server-cert
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
