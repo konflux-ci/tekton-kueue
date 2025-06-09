@@ -31,6 +31,7 @@ import (
 // +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=resourceflavors,verbs=get;list;watch
 // +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=workloadpriorityclasses,verbs=get;list;watch
 // +kubebuilder:rbac:groups="tekton.dev",resources=pipelineruns,verbs=watch;update;patch;list
+// +kubebuilder:rbac:groups="tekton.dev",resources=pipelineruns/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=list;watch
 
 type PipelineRun tekv1.PipelineRun

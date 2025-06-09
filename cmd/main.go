@@ -18,11 +18,15 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
+
+	"k8s.io/apimachinery/pkg/util/yaml"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -41,6 +45,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	kueueconfig "github.com/konflux-ci/tekton-queue/internal/config"
 	"github.com/konflux-ci/tekton-queue/internal/controller"
 	webhookv1 "github.com/konflux-ci/tekton-queue/internal/webhook/v1"
 
@@ -63,6 +68,7 @@ func init() {
 }
 
 type SharedFlags struct {
+	ConfigDir       string
 	MetricsAddr     string
 	MetricsCertPath string
 	MetricsCertName string
@@ -74,6 +80,8 @@ type SharedFlags struct {
 }
 
 func (s *SharedFlags) AddFlags(fs *flag.FlagSet) {
+	fs.StringVar(&s.ConfigDir, "config-dir", "", "The directory that contains the configuration file "+
+		"for the tekton-kueue. ")
 	fs.StringVar(&s.MetricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	fs.StringVar(&s.MetricsCertPath, "metrics-cert-path", "",
@@ -216,10 +224,20 @@ func runWebhook(args []string) {
 		setupLog.Error(err, "unable to create manager")
 		os.Exit(1)
 	}
+	cfg, err := loadConfig(webhookFlags.ConfigDir)
+	if err != nil {
+		setupLog.Error(err, "unable to load webhook configuration")
+		os.Exit(1)
+	}
 
+	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg.QueueName)
+	if err != nil {
+		setupLog.Error(err, "Unable to create custom defaulter for webhook")
+		os.Exit(1)
+	}
 	err = webhookv1.SetupPipelineRunWebhookWithManager(
 		mgr,
-		&webhookv1.PipelineRunCustomDefaulter{KueueName: "pipelines-queue"},
+		customDefaulter,
 	)
 	if err != nil {
 		setupLog.Error(err, "Failed to setup the webhook")
@@ -240,7 +258,6 @@ func runWebhook(args []string) {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-
 }
 
 func getTLSOpts(s *SharedFlags) []func(*tls.Config) {
@@ -321,7 +338,6 @@ func getWebhookServerOptions(
 	webhookFlags WebhookFlags,
 	tlsOpts []func(*tls.Config),
 ) (webhook.Options, *certwatcher.CertWatcher) {
-
 	webhookOptions := webhook.Options{}
 	var webhookCertWatcher *certwatcher.CertWatcher = nil
 	webhookTLSOpts := tlsOpts
@@ -393,4 +409,23 @@ func parseFlagsOrDie(fs *flag.FlagSet, args []string) {
 		setupLog.Error(err, "Failed to parse CLI arguments")
 		os.Exit(1)
 	}
+}
+
+func loadConfig(dir string) (*kueueconfig.Config, error) {
+	setupLog.Info("Loading Kueue config from ", "dir", dir, "file", "config.yaml")
+	if dir == "" {
+		return nil, errors.New("no config directory provided")
+	}
+	data, err := os.ReadFile(path.Join(dir, "config.yaml"))
+	if err != nil {
+		setupLog.Error(err, "Failed to read Kueue config file")
+		return nil, err
+	}
+	cfg := &kueueconfig.Config{}
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		setupLog.Error(err, "Failed to parse Kueue config file")
+		return cfg, err
+	}
+	setupLog.Info("Loaded Kueue config from ", "dir", dir, "cfg", cfg)
+	return cfg, nil
 }

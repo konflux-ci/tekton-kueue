@@ -28,13 +28,13 @@ var _ = Describe("PipelineRun Webhook", func() {
 	var (
 		obj       *tektondevv1.PipelineRun
 		oldObj    *tektondevv1.PipelineRun
-		defaulter PipelineRunCustomDefaulter
+		defaulter pipelineRunCustomDefaulter
 	)
 
 	BeforeEach(func() {
 		obj = &tektondevv1.PipelineRun{}
 		oldObj = &tektondevv1.PipelineRun{}
-		defaulter = PipelineRunCustomDefaulter{}
+		defaulter = pipelineRunCustomDefaulter{}
 		Expect(defaulter).NotTo(BeNil(), "Expected defaulter to be initialized")
 		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
 		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
@@ -57,5 +57,4 @@ var _ = Describe("PipelineRun Webhook", func() {
 		//     Expect(obj.SomeFieldWithDefault).To(Equal("default_value"))
 		// })
 	})
-
 })

@@ -113,7 +113,7 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = SetupPipelineRunWebhookWithManager(mgr, &PipelineRunCustomDefaulter{KueueName: "pipelines-queue"})
+	err = SetupPipelineRunWebhookWithManager(mgr, &pipelineRunCustomDefaulter{QueueName: "pipelines-queue"})
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:webhook
