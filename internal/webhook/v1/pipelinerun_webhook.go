@@ -18,19 +18,17 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-// nolint:unused
-// log is for logging in this package.
-var pipelinerunlog = logf.Log.WithName("pipelinerun-resource")
+const QueueLabel = "kueue.x-k8s.io/queue-name"
 
 // SetupPipelineRunWebhookWithManager registers the webhook for PipelineRun in the manager.
 func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.CustomDefaulter) error {
@@ -48,30 +46,41 @@ func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.Cu
 //
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
-type PipelineRunCustomDefaulter struct {
-	KueueName string
+type pipelineRunCustomDefaulter struct {
+	QueueName string
 }
 
-var _ webhook.CustomDefaulter = &PipelineRunCustomDefaulter{}
-
-const QueueLabel = "kueue.x-k8s.io/queue-name"
+func NewCustomDefaulter(queueName string) (webhook.CustomDefaulter, error) {
+	defaulter := &pipelineRunCustomDefaulter{
+		queueName,
+	}
+	if err := defaulter.Validate(); err != nil {
+		return nil, err
+	}
+	return defaulter, nil
+}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind PipelineRun.
-func (d *PipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
+func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
 	plr, ok := obj.(*tekv1.PipelineRun)
 
 	if !ok {
 		return fmt.Errorf("expected an PipelineRun object but got %T", obj)
 	}
 	plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
-	if d.KueueName != "" {
-		if plr.Labels == nil {
-			plr.Labels = make(map[string]string)
-		}
-		if _, exists := plr.Labels[QueueLabel]; !exists {
-			plr.Labels[QueueLabel] = d.KueueName
-		}
+	if plr.Labels == nil {
+		plr.Labels = make(map[string]string)
+	}
+	if _, exists := plr.Labels[QueueLabel]; !exists {
+		plr.Labels[QueueLabel] = d.QueueName
 	}
 
+	return nil
+}
+
+func (d *pipelineRunCustomDefaulter) Validate() error {
+	if d.QueueName == "" {
+		return errors.New("queue name is not set in the PipelineRunCustomDefaulter")
+	}
 	return nil
 }

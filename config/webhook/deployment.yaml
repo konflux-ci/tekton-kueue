@@ -33,6 +33,7 @@ spec:
           - webhook
           - --health-probe-bind-address=:8081
           - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+          - --config-dir=/tmp/k8s-webhook-server/kueue-config
           - --metrics-bind-address=:8443
         image: controller:latest
         name: webhook
@@ -72,9 +73,15 @@ spec:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: webhook-certs
           readOnly: true
+        - mountPath: /tmp/k8s-webhook-server/kueue-config
+          name: kueue-config
+          readOnly: true
       volumes:
       - name: webhook-certs
         secret:
           secretName: webhook-server-cert
+      - name: kueue-config
+        configMap:
+          name: config
       serviceAccountName: webhook
       terminationGracePeriodSeconds: 10
