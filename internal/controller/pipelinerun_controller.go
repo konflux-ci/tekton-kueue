@@ -135,7 +135,7 @@ func (p *PipelineRun) Object() client.Object {
 }
 
 // PodSets implements jobframework.GenericJob.
-func (p *PipelineRun) PodSets() []kueue.PodSet {
+func (p *PipelineRun) PodSets() ([]kueue.PodSet, error) {
 	requests := p.resourcesRequests()
 
 	return []kueue.PodSet{
@@ -156,7 +156,7 @@ func (p *PipelineRun) PodSets() []kueue.PodSet {
 			},
 			Count: 1,
 		},
-	}
+	}, nil
 }
 
 // resourcesRequests will match all annotations starting with
@@ -208,3 +208,5 @@ func (p *PipelineRun) RunWithPodSetsInfo(podSetsInfo []podset.PodSetInfo) error 
 func (p *PipelineRun) Suspend() {
 	// Not implemented because this is not called when JobWithCustomStop is implemented.
 }
+
+// Suspend implements jobframework.GenericJob.
