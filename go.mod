@@ -15,7 +15,7 @@ require (
 	k8s.io/client-go v0.32.5
 	knative.dev/pkg v0.0.0-20250219013713-9e265611c097
 	sigs.k8s.io/controller-runtime v0.20.4
-	sigs.k8s.io/kueue v0.11.6
+	sigs.k8s.io/kueue v0.12.3
 )
 
 // incompatibility between the k8s.io/apiserver package and the github.com/google/cel-go library, specifically related to the TwoVarComprehensions function's signature.
@@ -70,7 +70,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/project-codeflare/appwrapper v1.1.0 // indirect
+	github.com/project-codeflare/appwrapper v1.1.2 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.63.0 // indirect
