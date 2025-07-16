@@ -26,6 +26,7 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -56,7 +57,10 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	configapi "sigs.k8s.io/kueue/apis/config/v1beta1"
 	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	"sigs.k8s.io/kueue/pkg/controller/admissionchecks/multikueue"
+	"sigs.k8s.io/kueue/pkg/controller/jobframework"
 )
 
 var (
@@ -166,8 +170,60 @@ func (m *MutateFlags) AddFlags(fs *flag.FlagSet) {
 	m.ZapOptions.BindFlags(fs)
 }
 
+type MultiKueueFlags struct {
+	SharedFlags
+	EnableLeaderElection bool
+	LeaseDuration        time.Duration
+	RenewDeadline        time.Duration
+	RetryPeriod          time.Duration
+	Namespace            string
+	GCInterval           time.Duration
+	Origin               string
+	WorkerLostTimeout    time.Duration
+	Frameworks           []string
+}
+
+func (mk *MultiKueueFlags) AddFlags(fs *flag.FlagSet) {
+	mk.SharedFlags.AddFlags(fs)
+	fs.BoolVar(&mk.EnableLeaderElection, "leader-elect", false,
+		"Enable leader election for multikueue manager. "+
+			"Enabling this will ensure there is only one active multikueue manager.")
+	fs.DurationVar(
+		&mk.LeaseDuration,
+		"leader-elect-lease-duration",
+		15*time.Second,
+		"The duration that non-leader candidates will wait after observing a "+
+			"	leadership renewal until attempting to acquire leadership.",
+	)
+	fs.DurationVar(
+		&mk.RenewDeadline,
+		"leader-elect-renew-deadline",
+		10*time.Second,
+		"The interval between attempts by the acting master to renew a leadership slot before it stops leading.",
+	)
+	fs.DurationVar(&mk.RetryPeriod, "leader-elect-retry-period", 2*time.Second,
+		"The duration the clients should wait between attempting acquisition and renewal of a leadership.")
+	fs.StringVar(&mk.Namespace, "namespace", "kueue-system",
+		"The namespace in which multikueue controllers should be started.")
+	fs.DurationVar(&mk.GCInterval, "gc-interval", 5*time.Minute,
+		"The interval between garbage collection runs.")
+	fs.StringVar(&mk.Origin, "origin", configapi.DefaultMultiKueueOrigin,
+		"The origin name for this multikueue instance.")
+	fs.DurationVar(&mk.WorkerLostTimeout, "worker-lost-timeout", 15*time.Minute,
+		"The timeout after which a worker is considered lost.")
+	// Note: Frameworks is a slice, we'll need to handle it differently
+	fs.Func("frameworks", "Comma-separated list of enabled frameworks (e.g., batch/job,kubeflow.org/mpijob)", func(s string) error {
+		if s == "" {
+			mk.Frameworks = []string{}
+			return nil
+		}
+		mk.Frameworks = strings.Split(s, ",")
+		return nil
+	})
+}
+
 func main() {
-	expectedSubcommands := "expected 'controller', 'webhook', or 'mutate' subcommand"
+	expectedSubcommands := "expected 'controller', 'webhook', 'mutate', or 'multikueue' subcommand"
 	if len(os.Args) < 2 {
 		fmt.Println(expectedSubcommands)
 		os.Exit(1)
@@ -180,6 +236,8 @@ func main() {
 		runWebhook(os.Args[2:])
 	case "mutate":
 		runMutate(os.Args[2:])
+	case "multikueue":
+		runMultiKueue(os.Args[2:])
 	default:
 		fmt.Printf("Got subcommand %s, %s", os.Args[1], expectedSubcommands)
 		os.Exit(1)
@@ -394,6 +452,79 @@ func runMutate(args []string) {
 	}
 
 	fmt.Print(string(mutatedData))
+}
+
+func runMultiKueue(args []string) {
+	fs := flag.NewFlagSet("multikueue", flag.ExitOnError)
+	var multiKueueFlags MultiKueueFlags
+	multiKueueFlags.AddFlags(fs)
+
+	parseFlagsOrDie(fs, args)
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(multiKueueFlags.ZapOptions)))
+	tlsOpts := getTLSOpts(&multiKueueFlags.SharedFlags)
+	metricsServerOptions, metricsCertWatcher := getMetricsServerOptions(&multiKueueFlags.SharedFlags, tlsOpts)
+
+	// Log leader election configuration
+	const leaderElectionId = "multikueue.konflux-ci.dev"
+	if multiKueueFlags.EnableLeaderElection {
+		setupLog.Info("Leader election enabled for MultiKueue with lease configuration",
+			"lease-duration", multiKueueFlags.LeaseDuration,
+			"renew-deadline", multiKueueFlags.RenewDeadline,
+			"retry-period", multiKueueFlags.RetryPeriod,
+			"leader-election-id", leaderElectionId)
+	} else {
+		setupLog.Info("Leader election disabled for MultiKueue")
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme:                 scheme,
+		Metrics:                metricsServerOptions,
+		HealthProbeBindAddress: multiKueueFlags.ProbeAddr,
+		LeaderElection:         multiKueueFlags.EnableLeaderElection,
+		LeaderElectionID:       leaderElectionId,
+		LeaseDuration:          &multiKueueFlags.LeaseDuration,
+		RenewDeadline:          &multiKueueFlags.RenewDeadline,
+		RetryPeriod:            &multiKueueFlags.RetryPeriod,
+
+		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
+		// when the Manager ends. This requires the binary to immediately end when the
+		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
+		// speeds up voluntary leader transitions as the new leader don't have to wait
+		// LeaseDuration time first.
+		//
+		// In the default scaffold provided, the program ends immediately after
+		// the manager stops, so would be fine to enable this option. However,
+		// if you are doing or is intended to do any operation such as perform cleanups
+		// after the manager stops then its usage might be unsafe.
+		// LeaderElectionReleaseOnCancel: true,
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to create multikueue manager")
+		os.Exit(1)
+	}
+
+	ctx := ctrl.SetupSignalHandler()
+
+	adapters := map[string]jobframework.MultiKueueAdapter{controller.PLRGVK.String(): &controller.PipelineRun{}}
+
+	if err := multikueue.SetupControllers(mgr, multiKueueFlags.Namespace,
+		multikueue.WithGCInterval(multiKueueFlags.GCInterval),
+		multikueue.WithOrigin(multiKueueFlags.Origin),
+		multikueue.WithWorkerLostTimeout(multiKueueFlags.WorkerLostTimeout),
+		multikueue.WithAdapters(adapters),
+	); err != nil {
+		setupLog.Error(err, "Could not setup MultiKueue controller")
+		os.Exit(1)
+	}
+
+	addMetricsCertWatcher(mgr, metricsCertWatcher)
+	addReadyAndHealthChecksToMgrOrDie(mgr)
+
+	setupLog.Info("starting multikueue manager")
+	if err := mgr.Start(ctx); err != nil {
+		setupLog.Error(err, "problem running multikueue manager")
+		os.Exit(1)
+	}
 }
 
 func getTLSOpts(s *SharedFlags) []func(*tls.Config) {

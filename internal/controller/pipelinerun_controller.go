@@ -4,7 +4,9 @@ import (
 	"context"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -53,6 +55,8 @@ const (
 var (
 	_      jobframework.GenericJob        = &PipelineRun{}
 	_      jobframework.JobWithCustomStop = &PipelineRun{}
+	_      jobframework.MultiKueueAdapter = &PipelineRun{}
+	_      jobframework.MultiKueueWatcher = &PipelineRun{}
 	PLRGVK                                = tekv1.SchemeGroupVersion.WithKind("PipelineRun")
 	PLRLog                                = ctrl.Log.WithName(ControllerName)
 )
@@ -207,4 +211,37 @@ func (p *PipelineRun) RunWithPodSetsInfo(podSetsInfo []podset.PodSetInfo) error 
 // Suspend implements jobframework.GenericJob.
 func (p *PipelineRun) Suspend() {
 	// Not implemented because this is not called when JobWithCustomStop is implemented.
+}
+
+
+// MultiKueue Interfaces
+
+// GetEmptyList implements jobframework.MultiKueueWatcher.
+func (p *PipelineRun) GetEmptyList() client.ObjectList {
+	panic("unimplemented")
+}
+
+// WorkloadKeyFor implements jobframework.MultiKueueWatcher.
+func (p *PipelineRun) WorkloadKeyFor(runtime.Object) (types.NamespacedName, error) {
+	panic("unimplemented")
+}
+
+// DeleteRemoteObject implements jobframework.MultiKueueAdapter.
+func (p *PipelineRun) DeleteRemoteObject(ctx context.Context, remoteClient client.Client, key types.NamespacedName) error {
+	panic("unimplemented")
+}
+
+// IsJobManagedByKueue implements jobframework.MultiKueueAdapter.
+func (p *PipelineRun) IsJobManagedByKueue(ctx context.Context, localClient client.Client, key types.NamespacedName) (bool, string, error) {
+	panic("unimplemented")
+}
+
+// KeepAdmissionCheckPending implements jobframework.MultiKueueAdapter.
+func (p *PipelineRun) KeepAdmissionCheckPending() bool {
+	panic("unimplemented")
+}
+
+// SyncJob implements jobframework.MultiKueueAdapter.
+func (p *PipelineRun) SyncJob(ctx context.Context, localClient client.Client, remoteClient client.Client, key types.NamespacedName, workloadName string, origin string) error {
+	panic("unimplemented")
 }
