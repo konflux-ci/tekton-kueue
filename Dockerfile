@@ -24,7 +24,7 @@ COPY internal/ internal/
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
 
-FROM registry.access.redhat.com/ubi9-micro@sha256:c2f11c487861612f877e624f092d991aa271cb2c1a5a001a95007a3ea8761140
+FROM registry.access.redhat.com/ubi9-micro@sha256:233cce2df15dc7cd790f7f1ddbba5d4f59f31677c13a47703db3c2ca2fea67b6
 WORKDIR /
 COPY --from=builder /opt/app-root/src/manager .
 COPY LICENSE /licenses/
