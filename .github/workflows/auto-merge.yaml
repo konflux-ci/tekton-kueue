@@ -1,0 +1,43 @@
+name: auto-merge
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 * * * *" # At every hour
+
+jobs:
+  auto-merge-prs:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout the current repo
+        uses: actions/checkout@v4
+      - name: auto-approve-konflux-deps
+        run: |
+          gh auth status
+          BASE_BRANCH=$(git branch --show-current)
+          echo "Base branch is $BASE_BRANCH"
+          for pr in $(gh pr list --state open --search "author:app/red-hat-konflux base:$BASE_BRANCH" --json "number" | jq ".[].number"); do
+            # Get latest commit SHA
+            sha=$(gh pr view "$pr" --json headRefOid --jq '.headRefOid')
+          
+            # Get repo full name (owner/repo)
+            repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+          
+            # Get all check runs and their conclusions
+            check_runs=$(gh api /repos/$repo/commits/$sha/check-runs)
+          
+            # Count how many check runs (i.e. workflows)
+            workflow_count=$(echo "$check_runs" | jq '.check_runs | length')
+          
+            # Check if all workflows are "success"
+            all_success=$(echo "$check_runs" | jq '[.check_runs[].conclusion] | all(.[]; . == "success")')
+            
+            if [[ "$workflow_count" -gt 0 && "$all_success" == "true" ]]; then
+                echo "Merging PR $pr"
+                gh pr merge --rebase --delete-branch --auto $pr
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
