@@ -17,44 +17,75 @@ limitations under the License.
 package v1
 
 import (
+	"context"
+
+	"github.com/konflux-ci/tekton-queue/internal/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
-	// TODO (user): Add any additional imports if needed
 )
 
 var _ = Describe("PipelineRun Webhook", func() {
 	var (
-		obj       *tektondevv1.PipelineRun
-		oldObj    *tektondevv1.PipelineRun
-		defaulter pipelineRunCustomDefaulter
+		defaulter *pipelineRunCustomDefaulter
+		plr       *tektondevv1.PipelineRun
+		ctx       context.Context
 	)
 
 	BeforeEach(func() {
-		obj = &tektondevv1.PipelineRun{}
-		oldObj = &tektondevv1.PipelineRun{}
-		defaulter = pipelineRunCustomDefaulter{}
-		Expect(defaulter).NotTo(BeNil(), "Expected defaulter to be initialized")
-		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
-		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
-		// TODO (user): Add any setup logic common to all tests
+		ctx = context.Background()
+		plr = &tektondevv1.PipelineRun{}
 	})
 
-	AfterEach(func() {
-		// TODO (user): Add any teardown logic common to all tests
-	})
+	Describe("Default", func() {
+		Context("when isMultiKueue is true", func() {
+			It("should not set the status", func() {
+				cfg := &config.Config{
+					QueueName:    "test-queue",
+					IsMultiKueue: true,
+				}
+				var err error
+				defaulter, err = newDefaulter(cfg, []PipelineRunMutator{})
+				Expect(err).NotTo(HaveOccurred())
+				err = defaulter.Default(ctx, plr)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plr.Spec.Status).To(BeEmpty())
+			})
+		})
 
-	Context("When creating PipelineRun under Defaulting Webhook", func() {
-		// TODO (user): Add logic for defaulting webhooks
-		// Example:
-		// It("Should apply defaults when a required field is empty", func() {
-		//     By("simulating a scenario where defaults should be applied")
-		//     obj.SomeFieldWithDefault = ""
-		//     By("calling the Default method to apply defaults")
-		//     defaulter.Default(ctx, obj)
-		//     By("checking that the default values are set")
-		//     Expect(obj.SomeFieldWithDefault).To(Equal("default_value"))
-		// })
+		Context("when isMultiKueue is false", func() {
+			It("should set the status to Pending", func() {
+				cfg := &config.Config{
+					QueueName:    "test-queue",
+					IsMultiKueue: false,
+				}
+				var err error
+				defaulter, err = newDefaulter(cfg, []PipelineRunMutator{})
+				Expect(err).NotTo(HaveOccurred())
+				err = defaulter.Default(ctx, plr)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plr.Spec.Status).To(Equal(tektondevv1.PipelineRunSpecStatus(tektondevv1.PipelineRunSpecStatusPending)))
+			})
+		})
+
+		It("should set the queue name", func() {
+			cfg := &config.Config{
+				QueueName: "test-queue",
+			}
+			var err error
+			defaulter, err = newDefaulter(cfg, []PipelineRunMutator{})
+			Expect(err).NotTo(HaveOccurred())
+			err = defaulter.Default(ctx, plr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(plr.Labels[QueueLabel]).To(Equal("test-queue"))
+		})
 	})
 })
+
+func newDefaulter(cfg *config.Config, mutators []PipelineRunMutator) (*pipelineRunCustomDefaulter, error) {
+	defaulter, err := NewCustomDefaulter(cfg, mutators)
+	if err != nil {
+		return nil, err
+	}
+	return defaulter.(*pipelineRunCustomDefaulter), nil
+}
