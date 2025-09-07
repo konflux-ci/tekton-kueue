@@ -24,12 +24,16 @@ import (
 	"github.com/konflux-ci/tekton-queue/internal/config"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-const QueueLabel = "kueue.x-k8s.io/queue-name"
+const (
+	managedByMultiKueue = "kueue.x-k8s.io/multikueue"
+	QueueLabel          = "kueue.x-k8s.io/queue-name"
+)
 
 // SetupPipelineRunWebhookWithManager registers the webhook for PipelineRun in the manager.
 func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.CustomDefaulter) error {
@@ -81,8 +85,18 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		plr.Labels[QueueLabel] = d.config.QueueName
 	}
 
-	if !d.config.IsMultiKueue {
-		plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
+	if plr.Spec.Status == "" {
+		// Status will be set only if it's not multiKueue
+		if !d.config.IsMultiKueue {
+			// MultiKueue is responsible for scheduling
+			// this. At present, this causes a race condition
+			// due to which pr in workers get pending status.
+			plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
+		} else if plr.Spec.ManagedBy == nil {
+			// We don't set the status and put managedBy
+			// to MultiKueue
+			plr.Spec.ManagedBy = ptr.To(managedByMultiKueue)
+		}
 	}
 
 	for _, mutator := range d.mutators {
