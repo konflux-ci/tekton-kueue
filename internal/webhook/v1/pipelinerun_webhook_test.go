@@ -20,6 +20,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/konflux-ci/tekton-queue/internal/common"
 	"github.com/konflux-ci/tekton-queue/internal/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -82,7 +83,7 @@ var _ = Describe("PipelineRun Webhook", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = defaulter.Default(ctx, plr)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(plr.Labels[QueueLabel]).To(Equal("test-queue"))
+			Expect(plr.Labels[common.QueueLabel]).To(Equal("test-queue"))
 		})
 	})
 })

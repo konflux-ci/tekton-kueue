@@ -21,15 +21,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/konflux-ci/tekton-queue/internal/common"
 	"github.com/konflux-ci/tekton-queue/internal/config"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
-
-const QueueLabel = "kueue.x-k8s.io/queue-name"
 
 // SetupPipelineRunWebhookWithManager registers the webhook for PipelineRun in the manager.
 func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.CustomDefaulter) error {
@@ -77,12 +77,14 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	if plr.Labels == nil {
 		plr.Labels = make(map[string]string)
 	}
-	if _, exists := plr.Labels[QueueLabel]; !exists {
-		plr.Labels[QueueLabel] = d.config.QueueName
+	if _, exists := plr.Labels[common.QueueLabel]; !exists {
+		plr.Labels[common.QueueLabel] = d.config.QueueName
 	}
 
-	if !d.config.IsMultiKueue {
-		plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
+	plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
+	if d.config.IsMultiKueue {
+		plr.Spec.Status = ""
+		plr.Spec.ManagedBy = ptr.To(common.ManagedByMultiKueueLabel)
 	}
 
 	for _, mutator := range d.mutators {
