@@ -1,0 +1,13 @@
+name: build and release tekton kueue
+on:
+  workflow_dispatch: { }
+  push:
+    branches:
+      - main
+      - release-*
+
+jobs:
+  release:
+    uses: pramodbindal/hack/.github/workflows/build-and-release.yaml@main
+
+
