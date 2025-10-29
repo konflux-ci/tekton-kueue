@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/konflux-ci/tekton-queue/internal/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -113,7 +114,9 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = SetupPipelineRunWebhookWithManager(mgr, &pipelineRunCustomDefaulter{QueueName: "pipelines-queue"})
+	defaulter, err := NewCustomDefaulter(&config.Config{QueueName: "pipelines-queue"}, nil)
+	Expect(err).NotTo(HaveOccurred())
+	err = SetupPipelineRunWebhookWithManager(mgr, defaulter)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:webhook

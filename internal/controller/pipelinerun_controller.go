@@ -23,6 +23,10 @@ import (
 	kueueconfig "sigs.k8s.io/kueue/apis/config/v1beta1"
 )
 
+const (
+	managedByMultiKueue = "kueue.x-k8s.io/multikueue"
+)
+
 // +kubebuilder:rbac:groups=scheduling.k8s.io,resources=priorityclasses,verbs=list;get;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;watch;update;patch
 // +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=workloads,verbs=get;list;watch;create;update;patch;delete
@@ -81,7 +85,8 @@ func (p *PipelineRun) Stop(ctx context.Context, c client.Client, _ []podset.PodS
 	plr := (*tekv1.PipelineRun)(p)
 	plrPendingOrRunning := (plr.Spec.Status == "") || (plr.Spec.Status == tekv1.PipelineRunSpecStatusPending)
 
-	if plr.IsDone() || !plrPendingOrRunning {
+	if plr.IsDone() || !plrPendingOrRunning ||
+		(plr.Spec.ManagedBy != nil && *plr.Spec.ManagedBy == managedByMultiKueue) {
 		return false, nil
 	}
 

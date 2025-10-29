@@ -21,14 +21,19 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/konflux-ci/tekton-queue/internal/config"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-const QueueLabel = "kueue.x-k8s.io/queue-name"
+const (
+	managedByMultiKueue = "kueue.x-k8s.io/multikueue"
+	QueueLabel          = "kueue.x-k8s.io/queue-name"
+)
 
 // SetupPipelineRunWebhookWithManager registers the webhook for PipelineRun in the manager.
 func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.CustomDefaulter) error {
@@ -51,14 +56,14 @@ type PipelineRunMutator interface {
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
 type pipelineRunCustomDefaulter struct {
-	QueueName string
-	mutators  []PipelineRunMutator
+	config   *config.Config
+	mutators []PipelineRunMutator
 }
 
-func NewCustomDefaulter(queueName string, mutators []PipelineRunMutator) (webhook.CustomDefaulter, error) {
+func NewCustomDefaulter(cfg *config.Config, mutators []PipelineRunMutator) (webhook.CustomDefaulter, error) {
 	defaulter := &pipelineRunCustomDefaulter{
-		queueName,
-		mutators,
+		config:   cfg,
+		mutators: mutators,
 	}
 	if err := defaulter.Validate(); err != nil {
 		return nil, err
@@ -73,12 +78,25 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	if !ok {
 		return fmt.Errorf("expected an PipelineRun object but got %T", obj)
 	}
-	plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
 	if plr.Labels == nil {
 		plr.Labels = make(map[string]string)
 	}
 	if _, exists := plr.Labels[QueueLabel]; !exists {
-		plr.Labels[QueueLabel] = d.QueueName
+		plr.Labels[QueueLabel] = d.config.QueueName
+	}
+
+	if plr.Spec.Status == "" {
+		// Status will be set only if it's not multiKueue
+		if !d.config.IsMultiKueue {
+			// MultiKueue is responsible for scheduling
+			// this. At present, this causes a race condition
+			// due to which pr in workers get pending status.
+			plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
+		} else if plr.Spec.ManagedBy == nil {
+			// We don't set the status and put managedBy
+			// to MultiKueue
+			plr.Spec.ManagedBy = ptr.To(managedByMultiKueue)
+		}
 	}
 
 	for _, mutator := range d.mutators {
@@ -91,7 +109,7 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 }
 
 func (d *pipelineRunCustomDefaulter) Validate() error {
-	if d.QueueName == "" {
+	if d.config.QueueName == "" {
 		return errors.New("queue name is not set in the PipelineRunCustomDefaulter")
 	}
 	return nil
