@@ -294,7 +294,7 @@ func runWebhook(args []string) {
 	}
 	mutator := cel.NewCELMutator(programs)
 
-	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg.QueueName, []webhookv1.PipelineRunMutator{mutator})
+	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg, []webhookv1.PipelineRunMutator{mutator})
 	if err != nil {
 		setupLog.Error(err, "Unable to create custom defaulter for webhook")
 		os.Exit(1)
@@ -373,7 +373,7 @@ func runMutate(args []string) {
 	mutator := cel.NewCELMutator(programs)
 
 	// Create custom defaulter
-	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg.QueueName, []webhookv1.PipelineRunMutator{mutator})
+	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg, []webhookv1.PipelineRunMutator{mutator})
 	if err != nil {
 		setupLog.Error(err, "Unable to create custom defaulter")
 		os.Exit(1)

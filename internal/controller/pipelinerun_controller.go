@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/konflux-ci/tekton-queue/internal/common"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -81,7 +82,8 @@ func (p *PipelineRun) Stop(ctx context.Context, c client.Client, _ []podset.PodS
 	plr := (*tekv1.PipelineRun)(p)
 	plrPendingOrRunning := (plr.Spec.Status == "") || (plr.Spec.Status == tekv1.PipelineRunSpecStatusPending)
 
-	if plr.IsDone() || !plrPendingOrRunning {
+	if plr.IsDone() || !plrPendingOrRunning ||
+		(plr.Spec.ManagedBy != nil && *plr.Spec.ManagedBy == common.ManagedByMultiKueueLabel) {
 		return false, nil
 	}
 

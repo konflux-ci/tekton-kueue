@@ -1,5 +1,3 @@
-package config
-
 /*
 Copyright 2025.
 
@@ -16,12 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-type Config struct {
-	QueueName    string `json:"queueName,omitempty"`
-	IsMultiKueue bool   `json:"isMultiKueue,omitempty"`
-	CEL          CEL    `json:"cel,omitempty"`
-}
+package common
 
-type CEL struct {
-	Expressions []string `json:"expressions,omitempty"`
-}
+const (
+	ManagedByMultiKueueLabel = "kueue.x-k8s.io/multikueue"
+	QueueLabel               = "kueue.x-k8s.io/queue-name"
+)
