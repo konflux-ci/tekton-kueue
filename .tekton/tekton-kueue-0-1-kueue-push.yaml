@@ -20,7 +20,7 @@ metadata:
     appstudio.openshift.io/component: tekton-kueue-0-1-kueue
     pipelines.appstudio.openshift.io/type: build
   name: tekton-kueue-0-1-kueue-on-push
-  namespace: konflux-infra-tenant
+  namespace: tekton-ecosystem-tenant
 spec:
   params:
   - name: git-url
@@ -28,7 +28,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/konflux-infra-tenant/kueue-rhel9:{{revision}}
+    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/kueue-rhel9:{{revision}}
   - name: dockerfile
     value: Dockerfile
   - name: prefetch-input
