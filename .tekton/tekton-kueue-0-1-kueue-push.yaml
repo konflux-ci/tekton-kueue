@@ -1,0 +1,46 @@
+# Generated for Konflux Application tekton-kueue by openshift-pipelines/hack. DO NOT EDIT
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    pipelinesascode.tekton.dev/cancel-in-progress: "true" # Cancel in-progress pipelines
+    pipelinesascode.tekton.dev/pipeline: "https://raw.githubusercontent.com/openshift-pipelines/operator/refs/heads/main/.tekton/docker-build-ta.yaml"
+    build.appstudio.openshift.io/repo: https://github.com/konflux-ci/tekton-kueue.git?rev={{revision}}
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
+      == "release-v0.1.x" &&
+      ("***".pathChanged() ||
+      "Dockerfile".pathChanged() ||
+      ".tekton/tekton-kueue-0-1-kueue-push.yaml".pathChanged())
+  creationTimestamp: null
+  labels:
+    appstudio.openshift.io/application: tekton-kueue-0-1
+    appstudio.openshift.io/component: tekton-kueue-0-1-kueue
+    pipelines.appstudio.openshift.io/type: build
+  name: tekton-kueue-0-1-kueue-on-push
+  namespace: konflux-infra-tenant
+spec:
+  params:
+  - name: git-url
+    value: '{{source_url}}'
+  - name: revision
+    value: '{{revision}}'
+  - name: output-image
+    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/kueue-rhel9:{{revision}}
+  - name: dockerfile
+    value: Dockerfile
+  - name: prefetch-input
+    value: |
+      {"type": "gomod", "path": "."}
+
+  pipelineRef:
+    name: docker-build-ta
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-tekton-kueue-kueue-0-1
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
+status: {}
