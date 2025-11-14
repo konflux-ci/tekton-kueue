@@ -17,7 +17,7 @@ metadata:
       ".tekton/tekton-kueue-0-1-kueue-pull-request.yaml".pathChanged())
   labels:
     appstudio.openshift.io/application: tekton-kueue-0-1
-    appstudio.openshift.io/component: tekton-kueue-0-1-kueue
+    appstudio.openshift.io/component: tekton-kueue-kueue-0-1
     pipelines.appstudio.openshift.io/type: build
   name: tekton-kueue-0-1-kueue-on-pull-request
   namespace: konflux-infra-tenant
