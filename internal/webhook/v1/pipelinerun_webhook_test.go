@@ -19,6 +19,7 @@ package v1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	// TODO (user): Add any additional imports if needed
@@ -46,15 +47,15 @@ var _ = Describe("PipelineRun Webhook", func() {
 	})
 
 	Context("When creating PipelineRun under Defaulting Webhook", func() {
-		// TODO (user): Add logic for defaulting webhooks
-		// Example:
-		// It("Should apply defaults when a required field is empty", func() {
-		//     By("simulating a scenario where defaults should be applied")
-		//     obj.SomeFieldWithDefault = ""
-		//     By("calling the Default method to apply defaults")
-		//     defaulter.Default(ctx, obj)
-		//     By("checking that the default values are set")
-		//     Expect(obj.SomeFieldWithDefault).To(Equal("default_value"))
-		// })
+		It("Should report an error when serialization errors occur", func(ctx SpecContext) {
+			obj.Spec.Params = tektondevv1.Params{
+				{
+					Name: "build-platforms",
+					// intentionally leave off a value
+				},
+			}
+
+			Expect(defaulter.Default(ctx, obj)).Error().To(Satisfy(errors.IsBadRequest))
+		})
 	})
 })
