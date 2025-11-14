@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -71,8 +72,16 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	plr, ok := obj.(*tekv1.PipelineRun)
 
 	if !ok {
-		return fmt.Errorf("expected an PipelineRun object but got %T", obj)
+		return k8serrors.NewBadRequest(fmt.Sprintf("expected an PipelineRun object but got %T", obj))
 	}
+
+	// attempt to re-serialize a bad pipelinerun prior to processing
+	// so we can catch errors ourselves and handle them appropriately.
+	err := plr.Validate(ctx)
+	if err != nil {
+		return k8serrors.NewBadRequest(err.Error())
+	}
+
 	plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
 	if plr.Labels == nil {
 		plr.Labels = make(map[string]string)
