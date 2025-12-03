@@ -1,0 +1,48 @@
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: "default-flavor"
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: "cluster-queue"
+spec:
+  namespaceSelector: {} # match all.
+  resourceGroups:
+    - coveredResources: ["cpu", "memory", "tekton.dev/pipelineruns"]
+      flavors:
+        - name: "default-flavor"
+          resources:
+            - name: "cpu"
+              nominalQuota: 9
+            - name: "memory"
+              nominalQuota: 36Gi
+            - name: "tekton.dev/pipelineruns"
+              nominalQuota: "1"
+  admissionChecks:
+    - sample-multikueue
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  namespace: "default"
+  name: "user-queue"
+spec:
+  clusterQueue: "cluster-queue"
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: AdmissionCheck
+metadata:
+  name: sample-multikueue
+spec:
+  controllerName: kueue.x-k8s.io/multikueue
+  parameters:
+    apiGroup: kueue.x-k8s.io
+    kind: MultiKueueConfig
+    name: multikueue-test
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: MultiKueueConfig
+metadata:
+  name: multikueue-test
