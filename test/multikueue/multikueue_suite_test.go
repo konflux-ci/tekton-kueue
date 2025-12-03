@@ -1,0 +1,80 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package multikueue
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	tekton "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
+	kueue "sigs.k8s.io/kueue/client-go/clientset/versioned"
+)
+
+// TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
+// temporary environment to validate project changes with the purpose to be used in CI jobs.
+// The default setup installs CertManager and Prometheus.
+// The IMG environment varialbe must be specified with the image that should be used by the controller's deployment
+func TestE2E(t *testing.T) {
+	RegisterFailHandler(Fail)
+	_, _ = fmt.Fprintf(GinkgoWriter, "Starting tekton-kueue multikueue integration test suite\n")
+	RunSpecs(t, "Multikueue e2e suite")
+}
+
+var Clientset *kubernetes.Clientset
+var TektonClientset *tekton.Clientset
+var KueueClientset *kueue.Clientset
+
+var rawConfig *api.Config
+
+var _ = BeforeSuite(func() {
+
+	By("Setup Kube ClientSets", func() {
+		kubeconfig := os.Getenv("KUBECONFIG")
+		if kubeconfig == "" {
+			home, _ := os.UserHomeDir()
+			kubeconfig = filepath.Join(home, ".kube", "config")
+		}
+
+		kubeconfigBytes, err := os.ReadFile(kubeconfig)
+		Expect(err).NotTo(HaveOccurred())
+
+		rawConfig, err = clientcmd.Load(kubeconfigBytes)
+		Expect(err).NotTo(HaveOccurred())
+
+		hubConfig := clientcmd.NewNonInteractiveClientConfig(*rawConfig, "kind-hub", &clientcmd.ConfigOverrides{}, nil)
+		restConfig, err := hubConfig.ClientConfig()
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(err).NotTo(HaveOccurred())
+		Clientset, err = kubernetes.NewForConfig(restConfig)
+		Expect(err).NotTo(HaveOccurred())
+
+		TektonClientset, err = tekton.NewForConfig(restConfig)
+		Expect(err).NotTo(HaveOccurred())
+
+		KueueClientset, err = kueue.NewForConfig(restConfig)
+		Expect(err).NotTo(HaveOccurred())
+
+	})
+})
