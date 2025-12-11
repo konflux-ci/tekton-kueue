@@ -236,7 +236,7 @@ func runController(args []string) {
 	}
 
 	ctx := ctrl.SetupSignalHandler()
-	err = controller.SetupWithManager(mgr)
+	err = controller.SetupWithManager(ctx, mgr)
 	if err != nil {
 		setupLog.Error(err, "Failed to setup the controller")
 		os.Exit(1)
