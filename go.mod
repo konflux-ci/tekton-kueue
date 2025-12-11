@@ -75,7 +75,7 @@ require (
 	github.com/project-codeflare/appwrapper v1.1.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.63.0 // indirect
-	github.com/prometheus/procfs v0.16.0 // indirect
+	github.com/prometheus/procfs v0.19.2 // indirect
 	github.com/prometheus/statsd_exporter v0.22.7 // indirect
 	github.com/ray-project/kuberay/ray-operator v1.3.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
