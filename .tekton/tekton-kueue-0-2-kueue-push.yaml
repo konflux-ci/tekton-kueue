@@ -30,7 +30,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/konflux-infra-tenant/kueue-rhel9:{{revision}}
+    value: quay.io/redhat-user-workloads/konflux-infra-tenant/tekton-kueue/kueue-rhel9:{{revision}}
   - name: dockerfile
     value: Dockerfile
   - name: additional-tags
