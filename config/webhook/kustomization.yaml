@@ -14,6 +14,10 @@ configurations:
 apiVersion: kustomize.config.k8s.io/v1beta1
 
 configMapGenerator:
-- name: config
-  files:
+- files:
   - config.yaml
+  name: config
+  options:
+    disableNameSuffixHash: true
+    labels:
+      app.kubernetes.io/part-of: tekton-kueue

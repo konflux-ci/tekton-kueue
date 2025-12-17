@@ -26,11 +26,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/konflux-ci/tekton-kueue/internal/common"
+	"github.com/konflux-ci/tekton-kueue/internal/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"gopkg.in/yaml.v3"
 
-	webhookv1 "github.com/konflux-ci/tekton-queue/internal/webhook/v1"
-	"github.com/konflux-ci/tekton-queue/test/utils"
+	"github.com/konflux-ci/tekton-kueue/test/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -567,7 +569,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("PipelineRun is queued because lack of resources", func(ctx context.Context) {
 			plr = plrTemplate.DeepCopy()
 			plr.Labels = map[string]string{
-				webhookv1.QueueLabel: "blocking-pipelines-queue",
+				common.QueueLabel: "blocking-pipelines-queue",
 			}
 			Eventually(
 				func() error {
@@ -597,6 +599,41 @@ var _ = Describe("Manager", Ordered, func() {
 				ctx,
 			)
 		})
+	})
+
+	Context("Reload Config when ConfigMap is updated", Ordered, Label("config", "smoke"), func() {
+		queueName := "my-updated-queue"
+		kueueConfig := config.Config{
+			QueueName: queueName,
+		}
+
+		cfgMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      common.ConfigMapName,
+				Namespace: "tekton-kueue",
+			},
+			Data: map[string]string{},
+		}
+
+		It("Updated Queue Label must be applied on pipelinerun", func(ctx context.Context) {
+			plr := plrTemplate.DeepCopy()
+
+			cfgMapData, err := yaml.Marshal(kueueConfig)
+			Expect(err).ToNot(HaveOccurred())
+
+			cfgMap.Data[common.ConfigKey] = string(cfgMapData)
+
+			err = k8sClient.Update(ctx, cfgMap)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.Create(ctx, plr)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Updated Label must be applied on Pipelinerun
+			Expect(plr.ObjectMeta.Labels[common.QueueLabel]).To(Equal(queueName))
+
+		})
+
 	})
 })
 

@@ -19,4 +19,6 @@ package common
 const (
 	ManagedByMultiKueueLabel = "kueue.x-k8s.io/multikueue"
 	QueueLabel               = "kueue.x-k8s.io/queue-name"
+	ConfigKey                = "config.yaml"
+	ConfigMapName            = "tekton-kueue-config"
 )
