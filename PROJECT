@@ -6,7 +6,7 @@ domain: konflux-ci.dev
 layout:
 - go.kubebuilder.io/v4
 projectName: tekton-kueue
-repo: github.com/konflux-ci/tekton-queue
+repo: github.com/konflux-ci/tekton-kueue
 resources:
 - controller: true
   domain: konflux-ci.dev
