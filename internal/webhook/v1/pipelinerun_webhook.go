@@ -18,12 +18,10 @@ package v1
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/konflux-ci/tekton-queue/internal/common"
-	"github.com/konflux-ci/tekton-queue/internal/config"
+	"github.com/konflux-ci/tekton-kueue/internal/common"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -34,8 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
-
-const QueueLabel = "kueue.x-k8s.io/queue-name"
 
 // SetupPipelineRunWebhookWithManager registers the webhook for PipelineRun in the manager.
 func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.CustomDefaulter) error {
@@ -73,10 +69,6 @@ func logConstructor(base logr.Logger, req *admission.Request) logr.Logger {
 	return log
 }
 
-type PipelineRunMutator interface {
-	Mutate(*tekv1.PipelineRun) error
-}
-
 // TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
 // +kubebuilder:webhook:path=/mutate-tekton-dev-v1-pipelinerun,mutating=true,failurePolicy=fail,sideEffects=None,groups=tekton.dev,resources=pipelineruns,verbs=create,versions=v1,name=pipelinerun-kueue-defaulter.tekton-kueue.io,admissionReviewVersions=v1
@@ -87,18 +79,12 @@ type PipelineRunMutator interface {
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
 type pipelineRunCustomDefaulter struct {
-	config   *config.Config
-	mutators []PipelineRunMutator
+	configStore *ConfigStore
 }
 
-func NewCustomDefaulter(cfg *config.Config, mutators []PipelineRunMutator) (webhook.CustomDefaulter, error) {
-
+func NewCustomDefaulter(configStore *ConfigStore) (webhook.CustomDefaulter, error) {
 	defaulter := &pipelineRunCustomDefaulter{
-		config:   cfg,
-		mutators: mutators,
-	}
-	if err := defaulter.Validate(); err != nil {
-		return nil, err
+		configStore: configStore,
 	}
 	return defaulter, nil
 }
@@ -124,24 +110,18 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	if plr.Labels == nil {
 		plr.Labels = make(map[string]string)
 	}
+	config, mutators := d.configStore.GetConfigAndMutators()
 	if _, exists := plr.Labels[common.QueueLabel]; !exists {
-		plr.Labels[common.QueueLabel] = d.config.QueueName
+		plr.Labels[common.QueueLabel] = config.QueueName
 	}
-	if d.config.MultiKueueOverride {
+	if config.MultiKueueOverride {
 		plr.Spec.ManagedBy = ptr.To(common.ManagedByMultiKueueLabel)
 	}
-	for _, mutator := range d.mutators {
+	for _, mutator := range mutators {
 		if err := mutator.Mutate(plr); err != nil {
 			return err
 		}
 	}
 
-	return nil
-}
-
-func (d *pipelineRunCustomDefaulter) Validate() error {
-	if d.config.QueueName == "" {
-		return errors.New("queue name is not set in the PipelineRunCustomDefaulter")
-	}
 	return nil
 }

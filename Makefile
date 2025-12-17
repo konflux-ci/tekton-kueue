@@ -265,3 +265,9 @@ load-image: docker-build
 	$(CONTAINER_TOOL) save $(IMG) -o $${dir}/tekton-kueue.tar && \
 	kind load image-archive -n $(KIND_CLUSTER) $${dir}/tekton-kueue.tar && \
 	rm -r $${dir}
+
+# Apply tekton config  with all its dependencies.
+.PHONY: apply
+apply: docker-build docker-push release
+	$(KUBECTL) apply --server-side -f ${RELEASE_DIR}/release-${VERSION}.yaml
+	$(KUBECTL) wait --for=condition=Available deployment --all -n tekton-kueue --timeout=300s

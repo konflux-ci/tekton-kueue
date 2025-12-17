@@ -19,7 +19,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -28,7 +27,9 @@ import (
 	"reflect"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/yaml"
+	"github.com/konflux-ci/tekton-kueue/internal/common"
+	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	outputyaml "sigs.k8s.io/yaml"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -48,10 +49,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/konflux-ci/tekton-queue/internal/cel"
-	kueueconfig "github.com/konflux-ci/tekton-queue/internal/config"
-	"github.com/konflux-ci/tekton-queue/internal/controller"
-	webhookv1 "github.com/konflux-ci/tekton-queue/internal/webhook/v1"
+	"github.com/konflux-ci/tekton-kueue/internal/controller"
+	webhookv1 "github.com/konflux-ci/tekton-kueue/internal/webhook/v1"
 
 	// +kubebuilder:scaffold:imports
 
@@ -259,6 +258,7 @@ func runController(args []string) {
 }
 
 func runWebhook(args []string) {
+	setupLog.Info("starting webhook")
 	fs := flag.NewFlagSet("webhook", flag.ExitOnError)
 	var webhookFlags WebhookFlags
 	webhookFlags.AddFlags(fs)
@@ -269,35 +269,31 @@ func runWebhook(args []string) {
 
 	webhookOptions, webhookCertWatcher := getWebhookServerOptions(webhookFlags, tlsOpts)
 	webhookServer := webhook.NewServer(webhookOptions)
-
+	namespace, err := common.GetCurrentNamespace()
+	if err != nil {
+		setupLog.Error(err, "Exiting")
+		os.Exit(1)
+	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: webhookFlags.ProbeAddr,
 		WebhookServer:          webhookServer,
 		LeaderElection:         false,
+		Cache: cache.Options{
+			DefaultNamespaces: map[string]cache.Config{
+				namespace: {}, // namespace where SA has access
+			},
+		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create manager")
 		os.Exit(1)
 	}
-	cfg, err := loadConfig(webhookFlags.ConfigDir)
+	cfgStore := &webhookv1.ConfigStore{}
+	customDefaulter, err := webhookv1.NewCustomDefaulter(cfgStore)
 	if err != nil {
-		setupLog.Error(err, "unable to load webhook configuration")
-		os.Exit(1)
-	}
-
-	programs, err := cel.CompileCELPrograms(cfg.CEL.Expressions)
-	if err != nil {
-		setupLog.Error(err, "unable to compile CEL programs")
-		os.Exit(1)
-	}
-	mutator := cel.NewCELMutator(programs)
-
-	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg, []webhookv1.PipelineRunMutator{mutator})
-
-	if err != nil {
-		setupLog.Error(err, "Unable to create custom defaulter for webhook")
+		setupLog.Error(err, "unable to create custom defaulter")
 		os.Exit(1)
 	}
 	err = webhookv1.SetupPipelineRunWebhookWithManager(
@@ -308,6 +304,7 @@ func runWebhook(args []string) {
 		setupLog.Error(err, "Failed to setup the webhook")
 		os.Exit(1)
 	}
+	addConfigWatcher(mgr, cfgStore)
 	addRunnableOrDie(
 		mgr,
 		webhookCertWatcher,
@@ -359,27 +356,8 @@ func runMutate(args []string) {
 	}
 
 	// Load config
-	cfg, err := loadConfig(mutateFlags.ConfigDir)
-	if err != nil {
-		setupLog.Error(err, "unable to load configuration")
-		os.Exit(1)
-	}
-
-	// Compile CEL programs and create mutator
-	programs, err := cel.CompileCELPrograms(cfg.CEL.Expressions)
-	if err != nil {
-		setupLog.Error(err, "unable to compile CEL programs")
-		os.Exit(1)
-	}
-	mutator := cel.NewCELMutator(programs)
-
-	// Create custom defaulter
-	customDefaulter, err := webhookv1.NewCustomDefaulter(cfg, []webhookv1.PipelineRunMutator{mutator})
-
-	if err != nil {
-		setupLog.Error(err, "Unable to create custom defaulter")
-		os.Exit(1)
-	}
+	cfgStore := &webhookv1.ConfigStore{}
+	customDefaulter := customDefaulter(mutateFlags.ConfigDir, cfgStore)
 
 	// Apply mutation
 	ctx := context.Background()
@@ -542,6 +520,18 @@ func addMetricsCertWatcher(mgr ctrl.Manager, runnable manager.Runnable) {
 	)
 }
 
+func addConfigWatcher(mgr ctrl.Manager, configStore *webhookv1.ConfigStore) {
+	setupLog.Info("Adding config watcher to manager")
+	reconciler := controller.ConfigMapReconciler{
+		Client: mgr.GetClient(),
+		Store:  configStore,
+	}
+	err := reconciler.SetupWithManager(mgr)
+	if err != nil {
+		setupLog.Error(err, "Failed to add watcher to config ")
+		os.Exit(1)
+	}
+}
 func parseFlagsOrDie(fs *flag.FlagSet, args []string) {
 	if err := fs.Parse(args); err != nil {
 		setupLog.Error(err, "Failed to parse CLI arguments")
@@ -549,21 +539,25 @@ func parseFlagsOrDie(fs *flag.FlagSet, args []string) {
 	}
 }
 
-func loadConfig(dir string) (*kueueconfig.Config, error) {
-	setupLog.Info("Loading Kueue config from ", "dir", dir, "file", "config.yaml")
-	if dir == "" {
-		return nil, errors.New("no config directory provided")
+func customDefaulter(configDir string, cfgStore *webhookv1.ConfigStore) webhook.CustomDefaulter {
+	setupLog.Info("Loading Kueue config from ", "dir", configDir, "file", "config.yaml")
+	if configDir == "" {
+		setupLog.Error(fmt.Errorf("configDir cannot be empty directory provided"), "Exiting")
+		os.Exit(1)
 	}
-	data, err := os.ReadFile(path.Join(dir, "config.yaml"))
+	data, err := os.ReadFile(path.Join(configDir, "config.yaml"))
 	if err != nil {
-		setupLog.Error(err, "Failed to read Kueue config file")
-		return nil, err
+		setupLog.Error(err, "Failed to read Tekton-Kueue config file")
+		os.Exit(1)
 	}
-	cfg := &kueueconfig.Config{}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		setupLog.Error(err, "Failed to parse Kueue config file")
-		return cfg, err
+	if err := cfgStore.Update(data); err != nil {
+		setupLog.Error(err, "Failed to update Tekton-Kueue config file")
+		os.Exit(1)
 	}
-	setupLog.Info("Loaded Kueue config from ", "dir", dir, "cfg", cfg)
-	return cfg, nil
+	customDefaulter, err := webhookv1.NewCustomDefaulter(cfgStore)
+	if err != nil {
+		setupLog.Error(err, "Unable to create custom defaulter")
+		os.Exit(1)
+	}
+	return customDefaulter
 }

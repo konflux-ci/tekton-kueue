@@ -20,8 +20,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/konflux-ci/tekton-queue/internal/common"
-	"github.com/konflux-ci/tekton-queue/internal/config"
+	"github.com/konflux-ci/tekton-kueue/internal/common"
+	"github.com/konflux-ci/tekton-kueue/internal/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -56,8 +56,13 @@ var _ = Describe("PipelineRun Webhook", func() {
 					QueueName:          "test-queue",
 					MultiKueueOverride: true,
 				}
+
+				cfgStore := &ConfigStore{
+					config: cfg,
+				}
+
 				var err error
-				defaulter, err = NewCustomDefaulter(cfg, []PipelineRunMutator{})
+				defaulter, err = NewCustomDefaulter(cfgStore)
 				Expect(err).NotTo(HaveOccurred())
 				err = defaulter.Default(ctx, plr)
 				Expect(err).NotTo(HaveOccurred())
@@ -72,8 +77,11 @@ var _ = Describe("PipelineRun Webhook", func() {
 					QueueName:          "test-queue",
 					MultiKueueOverride: false,
 				}
+				cfgStore := &ConfigStore{
+					config: cfg,
+				}
 				var err error
-				defaulter, err = NewCustomDefaulter(cfg, []PipelineRunMutator{})
+				defaulter, err = NewCustomDefaulter(cfgStore)
 				Expect(err).NotTo(HaveOccurred())
 				err = defaulter.Default(ctx, plr)
 				Expect(err).NotTo(HaveOccurred())
@@ -85,8 +93,11 @@ var _ = Describe("PipelineRun Webhook", func() {
 			cfg := &config.Config{
 				QueueName: "test-queue",
 			}
+			cfgStore := &ConfigStore{
+				config: cfg,
+			}
 			var err error
-			defaulter, err = NewCustomDefaulter(cfg, []PipelineRunMutator{})
+			defaulter, err = NewCustomDefaulter(cfgStore)
 			Expect(err).NotTo(HaveOccurred())
 			err = defaulter.Default(ctx, plr)
 			Expect(err).NotTo(HaveOccurred())
