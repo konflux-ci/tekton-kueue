@@ -18,12 +18,10 @@ package v1
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/konflux-ci/tekton-queue/internal/common"
-	"github.com/konflux-ci/tekton-queue/internal/config"
+	"github.com/konflux-ci/tekton-kueue/pkg/common"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -34,8 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
-
-const QueueLabel = "kueue.x-k8s.io/queue-name"
 
 // SetupPipelineRunWebhookWithManager registers the webhook for PipelineRun in the manager.
 func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.CustomDefaulter) error {
@@ -87,18 +83,12 @@ type PipelineRunMutator interface {
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
 type pipelineRunCustomDefaulter struct {
-	config   *config.Config
-	mutators []PipelineRunMutator
+	configStore *ConfigStore
 }
 
-func NewCustomDefaulter(cfg *config.Config, mutators []PipelineRunMutator) (webhook.CustomDefaulter, error) {
-
+func NewCustomDefaulter(configStore *ConfigStore) (webhook.CustomDefaulter, error) {
 	defaulter := &pipelineRunCustomDefaulter{
-		config:   cfg,
-		mutators: mutators,
-	}
-	if err := defaulter.Validate(); err != nil {
-		return nil, err
+		configStore: configStore,
 	}
 	return defaulter, nil
 }
@@ -124,24 +114,18 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	if plr.Labels == nil {
 		plr.Labels = make(map[string]string)
 	}
-	if _, exists := plr.Labels[common.QueueLabel]; !exists {
-		plr.Labels[common.QueueLabel] = d.config.QueueName
+	config := d.configStore.GetConfig()
+	if label, exists := plr.Labels[common.QueueLabel]; !exists || label == "" {
+		plr.Labels[common.QueueLabel] = config.QueueName
 	}
-	if d.config.MultiKueueOverride {
+	if config.MultiClusterEnabled && config.MultiClusterRole == common.MultiClusterRoleHub {
 		plr.Spec.ManagedBy = ptr.To(common.ManagedByMultiKueueLabel)
 	}
-	for _, mutator := range d.mutators {
+	for _, mutator := range d.configStore.GetMutators() {
 		if err := mutator.Mutate(plr); err != nil {
 			return err
 		}
 	}
 
-	return nil
-}
-
-func (d *pipelineRunCustomDefaulter) Validate() error {
-	if d.config.QueueName == "" {
-		return errors.New("queue name is not set in the PipelineRunCustomDefaulter")
-	}
 	return nil
 }

@@ -20,8 +20,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/konflux-ci/tekton-queue/internal/common"
-	"github.com/konflux-ci/tekton-queue/internal/config"
+	"github.com/konflux-ci/tekton-kueue/pkg/common"
+	"github.com/konflux-ci/tekton-kueue/pkg/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -52,12 +52,18 @@ var _ = Describe("PipelineRun Webhook", func() {
 	Describe("Default", func() {
 		Context("when MultiKueueOverride is true", func() {
 			It("should set the managedBy", func(ctx context.Context) {
-				cfg := &config.Config{
-					QueueName:          "test-queue",
-					MultiKueueOverride: true,
+				cfg := config.Config{
+					QueueName:           "test-queue",
+					MultiClusterEnabled: true,
+					MultiClusterRole:    common.MultiClusterRoleHub,
 				}
+
+				cfgStore := &ConfigStore{
+					config: cfg,
+				}
+
 				var err error
-				defaulter, err = NewCustomDefaulter(cfg, []PipelineRunMutator{})
+				defaulter, err = NewCustomDefaulter(cfgStore)
 				Expect(err).NotTo(HaveOccurred())
 				err = defaulter.Default(ctx, plr)
 				Expect(err).NotTo(HaveOccurred())
@@ -68,12 +74,15 @@ var _ = Describe("PipelineRun Webhook", func() {
 
 		Context("when MultiKueueOverride is false", func() {
 			It("should set the status to Pending", func(ctx context.Context) {
-				cfg := &config.Config{
-					QueueName:          "test-queue",
-					MultiKueueOverride: false,
+				cfg := config.Config{
+					QueueName:           "test-queue",
+					MultiClusterEnabled: false,
+				}
+				cfgStore := &ConfigStore{
+					config: cfg,
 				}
 				var err error
-				defaulter, err = NewCustomDefaulter(cfg, []PipelineRunMutator{})
+				defaulter, err = NewCustomDefaulter(cfgStore)
 				Expect(err).NotTo(HaveOccurred())
 				err = defaulter.Default(ctx, plr)
 				Expect(err).NotTo(HaveOccurred())
@@ -82,11 +91,14 @@ var _ = Describe("PipelineRun Webhook", func() {
 		})
 
 		It("should set the queue name", func(ctx context.Context) {
-			cfg := &config.Config{
+			cfg := config.Config{
 				QueueName: "test-queue",
 			}
+			cfgStore := &ConfigStore{
+				config: cfg,
+			}
 			var err error
-			defaulter, err = NewCustomDefaulter(cfg, []PipelineRunMutator{})
+			defaulter, err = NewCustomDefaulter(cfgStore)
 			Expect(err).NotTo(HaveOccurred())
 			err = defaulter.Default(ctx, plr)
 			Expect(err).NotTo(HaveOccurred())
