@@ -2,7 +2,7 @@ module github.com/konflux-ci/tekton-queue
 
 go 1.24.0
 
-toolchain go1.24.4
+toolchain go1.25.5
 
 godebug default=go1.23
 
