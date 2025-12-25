@@ -1,0 +1,17 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: sample-pipeline-no-queue-label
+spec:
+  pipelineSpec:
+    tasks:
+      - name: test-echo
+        taskSpec:
+          steps:
+            - name: echo
+              image: registry.access.redhat.com/ubi9/ubi-minimal
+              script: |
+                #!bin/bash
+                echo "Hello World"
+                sleep 10
+                echo "Hello World - Done"

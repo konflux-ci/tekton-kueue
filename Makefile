@@ -193,7 +193,7 @@ ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 GOLANGCI_LINT_VERSION ?= v2.1.6
 KUEUE_VERSION ?= $(shell ./hack/get-kueue-version.sh)
-TEKTON_VERSION ?= v0.70.0
+TEKTON_VERSION ?= v1.6.0
 CERT_MANAGER_VERSION ?= v1.16.3
 
 .PHONY: kustomize
@@ -252,12 +252,12 @@ tekton:
 
 .PHONY: cert-manager
 cert-manager:
-	$(KUBECTL) apply --server-side -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
-	$(KUBECTL) wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
+	$(KUBECTL) apply --server-side -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml > /dev/null
+	$(KUBECTL) wait --for=condition=Available deployment --all -n cert-manager --timeout=300s > /dev/null
 
 .PHONY: cert-manager-undeploy
 cert-manager-undeploy:
-	$(KUBECTL) delete -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
+	$(KUBECTL) delete -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml > /dev/null
 
 .PHONY: load-image
 load-image: docker-build

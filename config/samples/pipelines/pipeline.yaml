@@ -1,9 +1,10 @@
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  generateName: pipeline-
+  generateName: pipeline-blocking-
   labels:
     app: test
+    kueue.x-k8s.io/queue-name: blocking-pipelines-queue
 spec:
   pipelineSpec:
     tasks:
