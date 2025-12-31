@@ -26,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/konflux-ci/tekton-kueue/internal/common"
-	"github.com/konflux-ci/tekton-kueue/internal/config"
+	"github.com/konflux-ci/tekton-kueue/pkg/common"
+	"github.com/konflux-ci/tekton-kueue/pkg/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
@@ -604,7 +604,9 @@ var _ = Describe("Manager", Ordered, func() {
 	Context("Reload Config when ConfigMap is updated", Ordered, Label("config", "smoke"), func() {
 		queueName := "my-updated-queue"
 		kueueConfig := config.Config{
-			QueueName: queueName,
+			TektonKueueConfig: config.TektonKueueConfig{
+				QueueName: queueName,
+			},
 		}
 
 		cfgMap := &corev1.ConfigMap{
