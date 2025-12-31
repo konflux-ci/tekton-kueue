@@ -1,4 +1,4 @@
-package multikueue
+package e2e_multikueue
 
 import (
 	"context"
@@ -115,7 +115,7 @@ var _ = Describe("MultiKueue Basic Scheduling", Ordered, Label("multikueue", "sm
 			}, "30s", "5s").Should(BeNumerically(">", 0))
 
 			// Validate Workload
-			Expect(len(wl.Items)).Should(BeNumerically(">", 0))
+			Expect(wl.Items).ShouldNot(BeEmpty())
 			for _, w := range wl.Items {
 				Expect(w.Spec.QueueName).To(Equal(localQueue))
 			}

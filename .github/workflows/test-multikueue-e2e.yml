@@ -1,11 +1,16 @@
-name: E2E Tests
+name: MultiKueue E2E Tests
 
 on:
   pull_request:
 
+env:
+  KIND_EXPERIMENTAL_PROVIDER: podman
+  IMG: konflux-ci.dev/tekton-kueue:${{ github.sha }}
+  KUBECONFIG: /tmp/tekton-kueue/e2e/multikueue/multikueue.kubeconfig
+
 jobs:
   test-e2e:
-    name: Run on Ubuntu
+    name: Run MultiKueue E2E
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code
@@ -25,14 +30,14 @@ jobs:
       - name: Verify kind installation
         run: kind version
 
-      - name: Create kind cluster
-        run: kind create cluster
-        env:
-          KIND_EXPERIMENTAL_PROVIDER: podman
+      - name: Dump Environment Variables
+        run: env | sort
+
+      - name: Create MultiCluster Environment
+        run: |
+          hack/01-setup-multikueue.sh
 
       - name: Running MultiKueue e2e
-        env:
-          KIND_EXPERIMENTAL_PROVIDER: podman
         run: |
           go mod tidy
-          go test ./test/multikueue/ -v -ginkgo.v
+          go test ./test/e2e-multikueue/ -v -ginkgo.v
