@@ -1,11 +1,11 @@
-package multikueue
+package e2e_multikueue
 
 import (
 	"context"
 	"os"
 	"os/exec"
 
-	"github.com/konflux-ci/tekton-kueue/internal/common"
+	"github.com/konflux-ci/tekton-kueue/pkg/common"
 	"github.com/konflux-ci/tekton-kueue/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -49,7 +49,8 @@ var _ = Describe("MultiKueue Basic Scheduling", Ordered, Label("multikueue", "sm
 				"-f",
 				"testdata/multikueue-resources.yaml",
 			)
-			_, err = utils.Run(cmd)
+			_, err = cmd.CombinedOutput()
+
 			Expect(err).To(Succeed(), "Failed to apply kueue resources")
 		})
 		By("Setup Namespace on Spoke Cluster", func() {
@@ -115,9 +116,9 @@ var _ = Describe("MultiKueue Basic Scheduling", Ordered, Label("multikueue", "sm
 			}, "30s", "5s").Should(BeNumerically(">", 0))
 
 			// Validate Workload
-			Expect(len(wl.Items)).Should(BeNumerically(">", 0))
+			Expect(wl.Items).ShouldNot(BeEmpty())
 			for _, w := range wl.Items {
-				Expect(w.Spec.QueueName).To(Equal(localQueue))
+				Expect(string(w.Spec.QueueName)).To(Equal(localQueue))
 			}
 		})
 
