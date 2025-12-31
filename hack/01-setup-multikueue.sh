@@ -9,28 +9,27 @@ set -o pipefail
 # Number of workers to create, default to 1
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ROOT="$(dirname "$SCRIPT_DIR")"
-export IMG=$KO_DOCKER_REPO/tekton-kueue:latest
+export IMG=${IMG:-konflux-ci.dev/tekton-kueue:v0.0.1}
 
 NUM_WORKERS=${1:-1}
 KUEUE_MANIFEST_URL="https://gist.githubusercontent.com/khrm/a83998529449ae0f0e25c264d4e61dd0/raw/bd7933eea4b509996dbe7a4739ff96dd2101b0e3/gistfile0.txt"
 
 TEMP_DIR="/tmp/tekton-kueue/e2e/multikueue"
-mkdir -p ${TEMP_DIR}
 export KUBECONFIG=${KUBECONFIG:-$TEMP_DIR/multikueue.kubeconfig}
+TEMP_DIR=$(dirname $KUBECONFIG)
+mkdir -p ${TEMP_DIR}
+
 
 function create_cluster() {
     cluserName=$1
     shift
     if kind get clusters | grep -q "^${cluserName}$"; then
-        echo "  ✅ Cluster $cluserName already exists. Continuing with the next command."
-        kind export kubeconfig --name $cluserName
-        return
+      echo "  ✅ Cluster $cluserName already exists. "
     else
-        echo "  ❌ Cluster $cluserName does not exist. Halting script or creating it."
-        kind create cluster --name=$cluserName $@
+      kind create cluster --name=$cluserName  $@
     fi
-
     kubectl config use-context kind-$cluserName
+    make load-image KIND_CLUSTER=$cluserName
 
     echo "Installing Kueue controller on $cluserName..."
     kubectl apply --server-side -f ${KUEUE_MANIFEST_URL}
@@ -227,9 +226,9 @@ function validate() {
 }
 
 function main() {
-
+#  docker run -d --restart=always -p "127.0.0.1:5001:5000" --name "kind-registry" registry:2
+#  docker network connect "kind" "kind-registry"
   echo "Building Tekton-Kueue"
-  make docker-build docker-push
 
   # Setup Hub Cluster
   setup_hub_cluster "hub"
