@@ -27,7 +27,7 @@ import (
 
 	"os/exec"
 
-	"github.com/konflux-ci/tekton-queue/test/utils"
+	"github.com/konflux-ci/tekton-kueue/test/utils"
 )
 
 var (
