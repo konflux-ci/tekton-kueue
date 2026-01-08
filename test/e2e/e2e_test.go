@@ -26,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/konflux-ci/tekton-kueue/internal/common"
-	"github.com/konflux-ci/tekton-kueue/internal/config"
+	"github.com/konflux-ci/tekton-kueue/pkg/common"
+	"github.com/konflux-ci/tekton-kueue/pkg/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"

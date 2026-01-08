@@ -27,7 +27,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/konflux-ci/tekton-kueue/internal/common"
+	"github.com/konflux-ci/tekton-kueue/pkg/common"
 	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	outputyaml "sigs.k8s.io/yaml"

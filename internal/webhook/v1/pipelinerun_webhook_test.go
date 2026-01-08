@@ -20,8 +20,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/konflux-ci/tekton-kueue/internal/common"
-	"github.com/konflux-ci/tekton-kueue/internal/config"
+	"github.com/konflux-ci/tekton-kueue/pkg/common"
+	"github.com/konflux-ci/tekton-kueue/pkg/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
