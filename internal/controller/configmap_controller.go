@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/konflux-ci/tekton-kueue/internal/common"
 	v1 "github.com/konflux-ci/tekton-kueue/internal/webhook/v1"
+	"github.com/konflux-ci/tekton-kueue/pkg/common"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"

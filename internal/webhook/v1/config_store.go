@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/konflux-ci/tekton-kueue/internal/cel"
-	"github.com/konflux-ci/tekton-kueue/internal/config"
+	"github.com/konflux-ci/tekton-kueue/pkg/config"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	ctrl "sigs.k8s.io/controller-runtime"
