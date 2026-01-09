@@ -11,7 +11,7 @@ require (
 	github.com/google/cel-go v0.26.0
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
-	github.com/prometheus/client_golang v1.22.0
+	github.com/prometheus/client_golang v1.23.2
 	github.com/tektoncd/pipeline v1.6.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.32.8
@@ -77,8 +77,8 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/project-codeflare/appwrapper v1.1.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.63.0 // indirect
-	github.com/prometheus/procfs v0.16.0 // indirect
+	github.com/prometheus/common v0.66.1 // indirect
+	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/prometheus/statsd_exporter v0.22.7 // indirect
 	github.com/ray-project/kuberay/ray-operator v1.3.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
