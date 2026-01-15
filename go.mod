@@ -80,7 +80,7 @@ require (
 	github.com/prometheus/procfs v0.16.0 // indirect
 	github.com/prometheus/statsd_exporter v0.22.7 // indirect
 	github.com/ray-project/kuberay/ray-operator v1.3.1 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
