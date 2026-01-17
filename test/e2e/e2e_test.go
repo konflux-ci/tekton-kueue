@@ -742,12 +742,11 @@ func EnsurePipelineRunSpecStatusIs(
 
 func GetOwnedWorkload(k8sClient client.Client, plr *tekv1.PipelineRun, ctx context.Context) (*kueue.Workload, error) {
 	wlList := &kueue.WorkloadList{}
-	ownerKey := jobframework.GetOwnerKey(tekv1.SchemeGroupVersion.WithKind("PipelineRun"))
 	err := k8sClient.List(
 		ctx,
 		wlList,
 		client.InNamespace(plr.GetNamespace()),
-		client.MatchingFields{ownerKey: plr.Name},
+		jobframework.OwnerReferenceIndexFieldMatcher(tekv1.SchemeGroupVersion.WithKind("PipelineRun"), plr.Name),
 	)
 	if err != nil {
 		return nil, err

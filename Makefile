@@ -191,7 +191,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.17.1
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v2.1.6
+GOLANGCI_LINT_VERSION ?= v2.7.2
 KUEUE_VERSION ?= $(shell ./hack/get-kueue-version.sh)
 TEKTON_VERSION ?= v0.70.0
 CERT_MANAGER_VERSION ?= v1.16.3
