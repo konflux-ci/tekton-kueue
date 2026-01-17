@@ -87,3 +87,59 @@ func TestControllerFlags_InvalidDuration(t *testing.T) {
 		t.Error("Expected error for invalid duration format, got nil")
 	}
 }
+
+func TestMutateFlags_AddFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected MutateFlags
+	}{
+		{
+			name: "default values",
+			args: []string{},
+			expected: MutateFlags{
+				PipelineRunFile: "",
+				ConfigDir:       "",
+			},
+		},
+		{
+			name: "with pipelinerun file",
+			args: []string{"--pipelinerun-file=/tmp/plr.yaml"},
+			expected: MutateFlags{
+				PipelineRunFile: "/tmp/plr.yaml",
+				ConfigDir:       "",
+			},
+		},
+		{
+			name: "with all flags",
+			args: []string{
+				"--pipelinerun-file=/tmp/plr.yaml",
+				"--config-dir=/tmp/config",
+			},
+			expected: MutateFlags{
+				PipelineRunFile: "/tmp/plr.yaml",
+				ConfigDir:       "/tmp/config",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var flags MutateFlags
+			fs := flag.NewFlagSet("test", flag.ContinueOnError)
+			flags.AddFlags(fs)
+
+			err := fs.Parse(tt.args)
+			if err != nil {
+				t.Fatalf("Failed to parse flags: %v", err)
+			}
+
+			if flags.PipelineRunFile != tt.expected.PipelineRunFile {
+				t.Errorf("PipelineRunFile = %v, want %v", flags.PipelineRunFile, tt.expected.PipelineRunFile)
+			}
+			if flags.ConfigDir != tt.expected.ConfigDir {
+				t.Errorf("ConfigDir = %v, want %v", flags.ConfigDir, tt.expected.ConfigDir)
+			}
+		})
+	}
+}

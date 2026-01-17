@@ -103,5 +103,88 @@ var _ = Describe("PipelineRun Webhook", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(plr.Labels[common.QueueLabel]).To(Equal("test-queue"))
 		})
+
+		It("should accept a valid PipelineRun with pipelineRef", func(ctx context.Context) {
+			plrWithRef := &tektondevv1.PipelineRun{
+				Spec: tektondevv1.PipelineRunSpec{
+					PipelineRef: &tektondevv1.PipelineRef{
+						Name: "my-pipeline",
+					},
+				},
+			}
+
+			cfg := &config.Config{
+				QueueName: "test-queue",
+			}
+			cfgStore := &ConfigStore{
+				config: cfg,
+			}
+			var err error
+			defaulter, err = NewCustomDefaulter(cfgStore)
+			Expect(err).NotTo(HaveOccurred())
+			err = defaulter.Default(ctx, plrWithRef)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(plrWithRef.Spec.Status).To(Equal(tektondevv1.PipelineRunSpecStatus(tektondevv1.PipelineRunSpecStatusPending)))
+			Expect(plrWithRef.Labels[common.QueueLabel]).To(Equal("test-queue"))
+		})
+
+		It("should accept a valid PipelineRun with pipelineSpec", func(ctx context.Context) {
+			plrWithSpec := &tektondevv1.PipelineRun{
+				Spec: tektondevv1.PipelineRunSpec{
+					PipelineSpec: &tektondevv1.PipelineSpec{
+						Tasks: []tektondevv1.PipelineTask{
+							{
+								Name: "echo",
+								TaskSpec: &tektondevv1.EmbeddedTask{
+									TaskSpec: tektondevv1.TaskSpec{
+										Steps: []tektondevv1.Step{
+											{
+												Name:   "echo",
+												Image:  "alpine:latest",
+												Script: "echo hello",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			cfg := &config.Config{
+				QueueName: "test-queue",
+			}
+			cfgStore := &ConfigStore{
+				config: cfg,
+			}
+			var err error
+			defaulter, err = NewCustomDefaulter(cfgStore)
+			Expect(err).NotTo(HaveOccurred())
+			err = defaulter.Default(ctx, plrWithSpec)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(plrWithSpec.Spec.Status).To(Equal(tektondevv1.PipelineRunSpecStatus(tektondevv1.PipelineRunSpecStatusPending)))
+			Expect(plrWithSpec.Labels[common.QueueLabel]).To(Equal("test-queue"))
+		})
+
+		It("should reject an invalid PipelineRun with neither pipelineRef nor pipelineSpec", func(ctx context.Context) {
+			invalidPlr := &tektondevv1.PipelineRun{
+				Spec: tektondevv1.PipelineRunSpec{
+					// Neither pipelineRef nor pipelineSpec is set - this is invalid
+				},
+			}
+
+			cfg := &config.Config{
+				QueueName: "test-queue",
+			}
+			cfgStore := &ConfigStore{
+				config: cfg,
+			}
+			var err error
+			defaulter, err = NewCustomDefaulter(cfgStore)
+			Expect(err).NotTo(HaveOccurred())
+			err = defaulter.Default(ctx, invalidPlr)
+			Expect(err).To(HaveOccurred())
+		})
 	})
 })
