@@ -17,20 +17,17 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"reflect"
 	"time"
 
 	"github.com/konflux-ci/tekton-kueue/pkg/common"
-	"gopkg.in/yaml.v3"
+	"github.com/konflux-ci/tekton-kueue/pkg/mutate"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	outputyaml "sigs.k8s.io/yaml"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -342,34 +339,10 @@ func runMutate(args []string) {
 		os.Exit(1)
 	}
 
-	// Load PipelineRun from file
-	pipelineRunData, err := os.ReadFile(mutateFlags.PipelineRunFile)
+	// Use the mutate package to perform the mutation
+	mutatedData, err := mutate.MutatePipelineRun(mutateFlags.PipelineRunFile, mutateFlags.ConfigDir)
 	if err != nil {
-		setupLog.Error(err, "Failed to read PipelineRun file", "file", mutateFlags.PipelineRunFile)
-		os.Exit(1)
-	}
-
-	var pipelineRun tekv1.PipelineRun
-	if err := yaml.Unmarshal(pipelineRunData, &pipelineRun); err != nil {
-		setupLog.Error(err, "Failed to parse PipelineRun YAML", "file", mutateFlags.PipelineRunFile)
-		os.Exit(1)
-	}
-
-	// Load config
-	cfgStore := &webhookv1.ConfigStore{}
-	customDefaulter := customDefaulter(mutateFlags.ConfigDir, cfgStore)
-
-	// Apply mutation
-	ctx := context.Background()
-	if err := customDefaulter.Default(ctx, &pipelineRun); err != nil {
-		setupLog.Error(err, "Failed to apply mutation to PipelineRun")
-		os.Exit(1)
-	}
-
-	// Output the mutated PipelineRun as YAML
-	mutatedData, err := outputyaml.Marshal(&pipelineRun)
-	if err != nil {
-		setupLog.Error(err, "Failed to marshal mutated PipelineRun to YAML")
+		setupLog.Error(err, "Failed to mutate PipelineRun")
 		os.Exit(1)
 	}
 
@@ -537,27 +510,4 @@ func parseFlagsOrDie(fs *flag.FlagSet, args []string) {
 		setupLog.Error(err, "Failed to parse CLI arguments")
 		os.Exit(1)
 	}
-}
-
-func customDefaulter(configDir string, cfgStore *webhookv1.ConfigStore) webhook.CustomDefaulter {
-	setupLog.Info("Loading Kueue config from ", "dir", configDir, "file", "config.yaml")
-	if configDir == "" {
-		setupLog.Error(fmt.Errorf("configDir cannot be empty directory provided"), "Exiting")
-		os.Exit(1)
-	}
-	data, err := os.ReadFile(path.Join(configDir, "config.yaml"))
-	if err != nil {
-		setupLog.Error(err, "Failed to read Tekton-Kueue config file")
-		os.Exit(1)
-	}
-	if err := cfgStore.Update(data); err != nil {
-		setupLog.Error(err, "Failed to update Tekton-Kueue config file")
-		os.Exit(1)
-	}
-	customDefaulter, err := webhookv1.NewCustomDefaulter(cfgStore)
-	if err != nil {
-		setupLog.Error(err, "Unable to create custom defaulter")
-		os.Exit(1)
-	}
-	return customDefaulter
 }
