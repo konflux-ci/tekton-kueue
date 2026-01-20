@@ -97,10 +97,11 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		return k8serrors.NewBadRequest(fmt.Sprintf("expected an PipelineRun object but got %T", obj))
 	}
 
-	// Attempt to catch bad pipelineruns prior to processing so we can catch
+	// Set default values and attempt to catch bad pipelineruns prior to processing so we can catch
 	// errors ourselves and handle them appropriately.  Only validate the spec
 	// field, since we might be getting a pipelinerun with a generated name, which
 	// the top-level Validate() method will reject
+	plr.Spec.SetDefaults(ctx)
 	err := plr.Spec.Validate(ctx)
 	if err != nil {
 		return k8serrors.NewBadRequest(err.Error())
