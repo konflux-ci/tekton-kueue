@@ -18,7 +18,7 @@ require (
 	k8s.io/client-go v0.32.8
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
-	knative.dev/pkg v0.0.0-20250415155312-ed3e2158b883
+	knative.dev/pkg 4a022ed9999a
 	sigs.k8s.io/controller-runtime v0.20.4
 	sigs.k8s.io/kueue v0.11.6
 	sigs.k8s.io/yaml v1.6.0
