@@ -42,6 +42,7 @@ import (
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	kapi "knative.dev/pkg/apis"
@@ -132,7 +133,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}))
 		})
 
-		By("Deploying ResourceFlavoer, ClusterQueue and Local Queue", func() {
+		By("Deploying ResourceFlavor, ClusterQueue and Local Queue", func() {
 			cmd := exec.Command(
 				"kubectl",
 				"apply",
@@ -596,6 +597,17 @@ var _ = Describe("Manager", Ordered, func() {
 				k8sClient,
 				ctx,
 			)
+		})
+	})
+
+	Context("Invalid resource is requested", Ordered, func() {
+		var plr *tekv1.PipelineRun
+		It("rejects the PipelineRun", func(ctx context.Context) {
+			plr = plrTemplate.DeepCopy()
+			plr.Annotations = map[string]string{
+				"kueue.konflux-ci.dev/requests-memory+invalid": "2Gi",
+			}
+			Expect(k8sClient.Create(ctx, plr)).Should(MatchError(errors.IsInvalid, "Invalid"))
 		})
 	})
 })
