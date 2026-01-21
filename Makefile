@@ -194,7 +194,7 @@ ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -
 GOLANGCI_LINT_VERSION ?= v2.1.6
 KUEUE_VERSION ?= $(shell ./hack/get-kueue-version.sh)
 TEKTON_VERSION ?= v0.70.0
-CERT_MANAGER_VERSION ?= v1.16.3
+CERT_MANAGER_VERSION ?= v1.19.2
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
