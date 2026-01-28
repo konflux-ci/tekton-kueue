@@ -37,7 +37,7 @@ spec:
     value: Dockerfile
   - name: additional-tags
     value:
-      - "on-pr-0.3.0"
+      - "on-pr-v0.3.0"
   - name: build-platforms
     value:
     - linux/x86_64
