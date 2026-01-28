@@ -35,7 +35,7 @@ spec:
     value: Dockerfile
   - name: additional-tags
     value:
-      - "0.3.0"
+      - "v0.3.0"
   - name: prefetch-input
     value: |
       {"type": "gomod", "path": "."}
