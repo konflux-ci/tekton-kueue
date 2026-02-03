@@ -30,9 +30,6 @@ jobs:
       - name: Verify kind installation
         run: kind version
 
-      - name: Dump Environment Variables
-        run: env | sort
-
       - name: Create MultiCluster Environment
         run: |
           hack/01-setup-multikueue.sh
