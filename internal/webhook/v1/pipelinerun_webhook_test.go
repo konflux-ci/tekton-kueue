@@ -18,6 +18,7 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/konflux-ci/tekton-kueue/pkg/common"
@@ -25,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
@@ -254,6 +256,30 @@ var _ = Describe("PipelineRun Webhook", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(plrWithParamNoType.Spec.Status).To(Equal(tektondevv1.PipelineRunSpecStatus(tektondevv1.PipelineRunSpecStatusPending)))
 			Expect(plrWithParamNoType.Labels[common.QueueLabel]).To(Equal("test-queue"))
+		})
+
+		It("should reject an invalid PipelineRun", func(ctx context.Context) {
+			// found via fuzzing
+			badJson := []byte("{\"spec\":{\"pipelineSpec\":{\"params\":[{}]},\"params\":[{}]}}")
+
+			pipelineRun := tektondevv1.PipelineRun{}
+			Expect(json.Unmarshal(badJson, &pipelineRun)).To(Succeed())
+
+			cfg := &config.Config{
+				QueueName: "test-queue",
+			}
+			cfgStore := &ConfigStore{
+				config: cfg,
+			}
+			var err error
+			defaulter, err = NewCustomDefaulter(cfgStore)
+			Expect(err).NotTo(HaveOccurred())
+			// we expect to see a 400 Bad Request here
+			Expect(defaulter.Default(ctx, &pipelineRun)).
+				Error().
+				To(And(
+					Satisfy(errors.IsBadRequest),
+					MatchError(ContainSubstring("failed to serialize pipelinerun"))))
 		})
 	})
 })
