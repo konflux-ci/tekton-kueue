@@ -18,6 +18,7 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -94,7 +95,7 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	plr, ok := obj.(*tekv1.PipelineRun)
 
 	if !ok {
-		return k8serrors.NewBadRequest(fmt.Sprintf("expected an PipelineRun object but got %T", obj))
+		return k8serrors.NewBadRequest(fmt.Sprintf("expected a PipelineRun object but got %T", obj))
 	}
 
 	// Set default values and attempt to catch bad pipelineruns prior to processing so we can catch
@@ -102,9 +103,21 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	// field, since we might be getting a pipelinerun with a generated name, which
 	// the top-level Validate() method will reject
 	plr.Spec.SetDefaults(ctx)
-	err := plr.Spec.Validate(ctx)
-	if err != nil {
-		return k8serrors.NewBadRequest(err.Error())
+	if err := plr.Spec.Validate(ctx); err != nil {
+		return k8serrors.NewBadRequest(fmt.Sprintf("invalid pipelinerun: %v", err))
+	}
+
+	// Attempt to serialize the pipelinerun, and return 400 Bad Request if it fails.  We only want
+	// to process valid resources, but since this is a mutation webhook, validation webhooks
+	// haven't processed this resource yet.  This may cause problems in the future if we have other
+	// mutation webhooks on pipelineruns, since kubernetes does not guarantee an order in
+	// processing mutation webhooks.
+	//
+	// TODO(@sadlerap): only do this marshalling once, we do a bunch of marshalling inside the
+	// mutators as well so this is duplicate work
+	if _, err := json.Marshal(plr); err != nil {
+		// bad request
+		return k8serrors.NewBadRequest(fmt.Sprintf("failed to serialize pipelinerun: %v", err))
 	}
 
 	plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
