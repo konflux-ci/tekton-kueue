@@ -185,8 +185,11 @@ var _ = Describe("PipelineRun Webhook", func() {
 			var err error
 			defaulter, err = NewCustomDefaulter(cfgStore)
 			Expect(err).NotTo(HaveOccurred())
-			err = defaulter.Default(ctx, invalidPlr)
-			Expect(err).To(HaveOccurred())
+			Expect(defaulter.Default(ctx, invalidPlr)).
+				Error().
+				To(And(
+					Satisfy(errors.IsBadRequest),
+					MatchError(ContainSubstring("invalid pipelinerun: expected exactly one, got neither: pipelineRef, pipelineSpec"))))
 		})
 
 		It("should accept a PipelineRun with pipelineSpec containing a parameter without explicit type", func(ctx context.Context) {
@@ -280,6 +283,24 @@ var _ = Describe("PipelineRun Webhook", func() {
 				To(And(
 					Satisfy(errors.IsBadRequest),
 					MatchError(ContainSubstring("failed to serialize pipelinerun"))))
+		})
+
+		It("should reject a non-pipelinerun object", func(ctx context.Context) {
+			cfg := &config.Config{
+				QueueName: "test-queue",
+			}
+			cfgStore := &ConfigStore{
+				config: cfg,
+			}
+			var err error
+			defaulter, err = NewCustomDefaulter(cfgStore)
+			Expect(err).NotTo(HaveOccurred())
+			// we don't expect to see this in practice, but better safe than sorry
+			Expect(defaulter.Default(ctx, &tektondevv1.Pipeline{})).
+				Error().
+				To(And(
+					Satisfy(errors.IsBadRequest),
+					MatchError(ContainSubstring("expected a PipelineRun object but got *v1.Pipeline"))))
 		})
 	})
 })

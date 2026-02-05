@@ -95,7 +95,7 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	plr, ok := obj.(*tekv1.PipelineRun)
 
 	if !ok {
-		return k8serrors.NewBadRequest(fmt.Sprintf("expected an PipelineRun object but got %T", obj))
+		return k8serrors.NewBadRequest(fmt.Sprintf("expected a PipelineRun object but got %T", obj))
 	}
 
 	// Set default values and attempt to catch bad pipelineruns prior to processing so we can catch
@@ -103,9 +103,8 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	// field, since we might be getting a pipelinerun with a generated name, which
 	// the top-level Validate() method will reject
 	plr.Spec.SetDefaults(ctx)
-	err := plr.Spec.Validate(ctx)
-	if err != nil {
-		return k8serrors.NewBadRequest(err.Error())
+	if err := plr.Spec.Validate(ctx); err != nil {
+		return k8serrors.NewBadRequest(fmt.Sprintf("invalid pipelinerun: %v", err))
 	}
 
 	// Attempt to serialize the pipelinerun, and return 400 Bad Request if it fails.  We only want
