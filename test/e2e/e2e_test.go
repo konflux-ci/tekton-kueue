@@ -134,7 +134,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}))
 		})
 
-		By("Deploying ResourceFlavoer, ClusterQueue and Local Queue", func() {
+		By("Deploying ResourceFlavor, ClusterQueue and Local Queue", func() {
 			cmd := exec.Command(
 				"kubectl",
 				"apply",
@@ -682,7 +682,17 @@ var _ = Describe("Manager", Ordered, func() {
 				ShouldNot(Equal(queueName))
 
 		})
+	})
 
+	Context("Invalid resource is requested", Ordered, func() {
+		var plr *tekv1.PipelineRun
+		It("rejects the PipelineRun", func(ctx context.Context) {
+			plr = plrTemplate.DeepCopy()
+			plr.Annotations = map[string]string{
+				"kueue.konflux-ci.dev/requests-memory+invalid": "2Gi",
+			}
+			Expect(k8sClient.Create(ctx, plr)).Should(MatchError(kerrors.IsInvalid, "Invalid"))
+		})
 	})
 })
 
