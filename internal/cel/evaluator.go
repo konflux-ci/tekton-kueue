@@ -9,6 +9,20 @@ import (
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
+// ValidationError indicates that a PipelineRun failed validation during
+// CEL evaluation (e.g., json.Marshal failed on a malformed resource).
+type ValidationError struct {
+	Err error
+}
+
+func (e *ValidationError) Error() string {
+	return fmt.Sprintf("pipelinerun validation failed: %v", e.Err)
+}
+
+func (e *ValidationError) Unwrap() error {
+	return e.Err
+}
+
 // CompiledProgram represents a type-safe compiled CEL program
 // Input: *tekv1.PipelineRun
 // Output: []MutationRequest
@@ -28,7 +42,7 @@ func (cp *CompiledProgram) Evaluate(pipelineRun *tekv1.PipelineRun) ([]*Mutation
 
 	pipelineRunMap, err := structToCELMap(pipelineRun)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert PipelineRun to map: %w", err)
+		return nil, &ValidationError{Err: fmt.Errorf("failed to convert PipelineRun to map: %w", err)}
 	}
 
 	// Create the evaluation context

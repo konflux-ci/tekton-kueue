@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/konflux-ci/tekton-kueue/internal/cel"
 	"github.com/konflux-ci/tekton-kueue/pkg/common"
 	"github.com/konflux-ci/tekton-kueue/pkg/config"
 	. "github.com/onsi/ginkgo/v2"
@@ -176,13 +177,18 @@ var _ = Describe("PipelineRun Webhook", func() {
 				},
 			}
 
+			programs, err := cel.CompileCELPrograms([]string{`label("env", "test")`})
+			Expect(err).NotTo(HaveOccurred())
+
 			cfg := &config.Config{
 				QueueName: "test-queue",
 			}
 			cfgStore := &ConfigStore{
 				config: cfg,
+				mutators: []PipelineRunMutator{
+					cel.NewCELMutator(programs),
+				},
 			}
-			var err error
 			defaulter, err = NewCustomDefaulter(cfgStore)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(defaulter.Default(ctx, invalidPlr)).
@@ -268,13 +274,18 @@ var _ = Describe("PipelineRun Webhook", func() {
 			pipelineRun := tektondevv1.PipelineRun{}
 			Expect(json.Unmarshal(badJson, &pipelineRun)).To(Succeed())
 
+			programs, err := cel.CompileCELPrograms([]string{`label("env", "test")`})
+			Expect(err).NotTo(HaveOccurred())
+
 			cfg := &config.Config{
 				QueueName: "test-queue",
 			}
 			cfgStore := &ConfigStore{
 				config: cfg,
+				mutators: []PipelineRunMutator{
+					cel.NewCELMutator(programs),
+				},
 			}
-			var err error
 			defaulter, err = NewCustomDefaulter(cfgStore)
 			Expect(err).NotTo(HaveOccurred())
 			// we expect to see a 400 Bad Request here
@@ -282,7 +293,7 @@ var _ = Describe("PipelineRun Webhook", func() {
 				Error().
 				To(And(
 					Satisfy(errors.IsBadRequest),
-					MatchError(ContainSubstring("failed to serialize pipelinerun"))))
+					MatchError(ContainSubstring("pipelinerun validation failed"))))
 		})
 
 		It("should reject a non-pipelinerun object", func(ctx context.Context) {
