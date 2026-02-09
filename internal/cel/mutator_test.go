@@ -36,11 +36,11 @@ const (
 	buildPlatformsExpression = `has(pipelineRun.spec.params) &&
 		pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
 		pipelineRun.spec.params.filter(
-		  p, 
+		  p,
 		  p.name == 'build-platforms')[0]
 		.value.map(
 		  p,
-		  annotation("kueue.konflux-ci.dev/requests-" + replace(p, "/", "-"), "1") 
+		  annotation("kueue.konflux-ci.dev/requests-" + replace(p, "/", "-"), "1")
 		) : []`
 
 	oldStylePlatformsExpression = `has(pipelineRun.spec.pipelineSpec) &&
@@ -94,7 +94,8 @@ func getBuildPlatformsParamsSmall() []tekv1.Param {
 func getPipelineTasksWithPlatforms() []tekv1.PipelineTask {
 	return []tekv1.PipelineTask{
 		{
-			Name: "build-arm64",
+			Name:    "build-arm64",
+			TaskRef: &tekv1.TaskRef{Name: "build-task"},
 			Params: []tekv1.Param{
 				{
 					Name:  "PLATFORM",
@@ -103,7 +104,8 @@ func getPipelineTasksWithPlatforms() []tekv1.PipelineTask {
 			},
 		},
 		{
-			Name: "build-amd64",
+			Name:    "build-amd64",
+			TaskRef: &tekv1.TaskRef{Name: "build-task"},
 			Params: []tekv1.Param{
 				{
 					Name:  "PLATFORM",
@@ -112,7 +114,8 @@ func getPipelineTasksWithPlatforms() []tekv1.PipelineTask {
 			},
 		},
 		{
-			Name: "build-s390x",
+			Name:    "build-s390x",
+			TaskRef: &tekv1.TaskRef{Name: "build-task"},
 			Params: []tekv1.Param{
 				{
 					Name:  "PLATFORM",
@@ -121,7 +124,8 @@ func getPipelineTasksWithPlatforms() []tekv1.PipelineTask {
 			},
 		},
 		{
-			Name: "no-platform-task",
+			Name:    "no-platform-task",
+			TaskRef: &tekv1.TaskRef{Name: "other-task"},
 			// No PLATFORM parameter
 		},
 	}
@@ -131,7 +135,8 @@ func getPipelineTasksWithPlatforms() []tekv1.PipelineTask {
 func getPipelineTasksWithoutPlatforms() []tekv1.PipelineTask {
 	return []tekv1.PipelineTask{
 		{
-			Name: "setup",
+			Name:    "setup",
+			TaskRef: &tekv1.TaskRef{Name: "setup-task"},
 			Params: []tekv1.Param{
 				{
 					Name:  "VERSION",
@@ -140,7 +145,8 @@ func getPipelineTasksWithoutPlatforms() []tekv1.PipelineTask {
 			},
 		},
 		{
-			Name: "cleanup",
+			Name:    "cleanup",
+			TaskRef: &tekv1.TaskRef{Name: "cleanup-task"},
 			// No parameters
 		},
 	}
@@ -489,7 +495,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 			initialLabels:       nil,
 			initialAnnotations:  nil,
 			initialParams:       nil,
-			pipelineSpec:        &tekv1.PipelineSpec{},
+			pipelineSpec:        &tekv1.PipelineSpec{Description: "test pipeline"},
 			expectedLabels:      nil,
 			expectedAnnotations: nil,
 			expectErr:           false,
