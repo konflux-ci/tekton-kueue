@@ -34,6 +34,15 @@ func TestMutate(t *testing.T) {
 	RunSpecs(t, "Mutate Suite")
 }
 
+const validPipelineRunYAML = `apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: test-pipelinerun
+spec:
+  pipelineRef:
+    name: my-pipeline
+`
+
 var _ = Describe("MutatePipelineRun", func() {
 	var (
 		tmpDir string
@@ -56,16 +65,8 @@ var _ = Describe("MutatePipelineRun", func() {
 			Expect(os.WriteFile(configPath, []byte(`queueName: "test-queue"`), 0644)).To(Succeed())
 
 			// Write PipelineRun file
-			plrContent := `apiVersion: tekton.dev/v1
-kind: PipelineRun
-metadata:
-  name: test-pipelinerun
-spec:
-  pipelineRef:
-    name: my-pipeline
-`
 			plrPath := filepath.Join(tmpDir, "pipelinerun.yaml")
-			Expect(os.WriteFile(plrPath, []byte(plrContent), 0644)).To(Succeed())
+			Expect(os.WriteFile(plrPath, []byte(validPipelineRunYAML), 0644)).To(Succeed())
 
 			// Call MutatePipelineRun
 			mutatedData, err := MutatePipelineRun(plrPath, tmpDir)
@@ -91,16 +92,8 @@ cel:
 			Expect(os.WriteFile(configPath, []byte(configContent), 0644)).To(Succeed())
 
 			// Write PipelineRun file
-			plrContent := `apiVersion: tekton.dev/v1
-kind: PipelineRun
-metadata:
-  name: test-pipelinerun
-spec:
-  pipelineRef:
-    name: my-pipeline
-`
 			plrPath := filepath.Join(tmpDir, "pipelinerun.yaml")
-			Expect(os.WriteFile(plrPath, []byte(plrContent), 0644)).To(Succeed())
+			Expect(os.WriteFile(plrPath, []byte(validPipelineRunYAML), 0644)).To(Succeed())
 
 			// Call MutatePipelineRun
 			mutatedData, err := MutatePipelineRun(plrPath, tmpDir)
@@ -194,16 +187,8 @@ cel:
 			Expect(os.WriteFile(configPath, []byte(configContent), 0644)).To(Succeed())
 
 			// Write a valid PipelineRun
-			plrContent := `apiVersion: tekton.dev/v1
-kind: PipelineRun
-metadata:
-  name: test-pipelinerun
-spec:
-  pipelineRef:
-    name: my-pipeline
-`
 			plrPath := filepath.Join(tmpDir, "pipelinerun.yaml")
-			Expect(os.WriteFile(plrPath, []byte(plrContent), 0644)).To(Succeed())
+			Expect(os.WriteFile(plrPath, []byte(validPipelineRunYAML), 0644)).To(Succeed())
 
 			// Call MutatePipelineRun - should fail with an InternalServerError
 			_, err := MutatePipelineRun(plrPath, tmpDir)
