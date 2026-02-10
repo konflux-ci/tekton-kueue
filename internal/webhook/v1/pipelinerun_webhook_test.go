@@ -296,6 +296,32 @@ var _ = Describe("PipelineRun Webhook", func() {
 					MatchError(ContainSubstring("pipelinerun validation failed"))))
 		})
 
+		It("should return InternalServerError when CEL evaluation fails", func(ctx context.Context) {
+			validPlr := &tektondevv1.PipelineRun{
+				Spec: tektondevv1.PipelineRunSpec{
+					PipelineRef: &tektondevv1.PipelineRef{
+						Name: "my-pipeline",
+					},
+				},
+			}
+
+			// Use a CEL expression that accesses a non-existent field, causing a runtime error
+			programs, err := cel.CompileCELPrograms([]string{`annotation("key", pipelineRun.doesNotExist)`})
+			Expect(err).NotTo(HaveOccurred())
+
+			cfgStore := &ConfigStore{
+				config:   &config.Config{QueueName: "test-queue"},
+				mutators: []PipelineRunMutator{cel.NewCELMutator(programs)},
+			}
+			defaulter, err = NewCustomDefaulter(cfgStore)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defaulter.Default(ctx, validPlr)).
+				Error().
+				To(And(
+					Satisfy(errors.IsInternalError),
+					MatchError(ContainSubstring("CEL evaluation failed"))))
+		})
+
 		It("should reject a non-pipelinerun object", func(ctx context.Context) {
 			cfg := &config.Config{
 				QueueName: "test-queue",

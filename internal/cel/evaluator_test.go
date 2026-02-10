@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"errors"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -23,12 +24,13 @@ func TestCompiledProgram_Evaluate_TypeSafety(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		expression  string
-		pipelineRun *tekv1.PipelineRun
-		expected    []MutationRequest
-		expectErr   bool
-		errMsg      string
+		name            string
+		expression      string
+		pipelineRun     *tekv1.PipelineRun
+		expected        []MutationRequest
+		expectErr       bool
+		expectedErrType any // target for errors.As (e.g., new(*EvaluationError))
+		errMsg          string
 	}{
 		{
 			name:        "valid single annotation",
@@ -63,18 +65,20 @@ func TestCompiledProgram_Evaluate_TypeSafety(t *testing.T) {
 			errMsg:      "pipelineRun cannot be nil",
 		},
 		{
-			name:        "runtime error - empty key",
-			expression:  `annotation("", "test-value")`,
-			pipelineRun: pipelineRun,
-			expectErr:   true,
-			errMsg:      "annotation key cannot be empty",
+			name:            "runtime error - empty key",
+			expression:      `annotation("", "test-value")`,
+			pipelineRun:     pipelineRun,
+			expectErr:       true,
+			expectedErrType: new(*EvaluationError),
+			errMsg:          "annotation key cannot be empty",
 		},
 		{
-			name:        "runtime error - empty value causes validation failure",
-			expression:  `annotation("test-key", "")`,
-			pipelineRun: pipelineRun,
-			expectErr:   true,
-			errMsg:      "mutation value cannot be empty",
+			name:            "runtime error - empty value causes validation failure",
+			expression:      `annotation("test-key", "")`,
+			pipelineRun:     pipelineRun,
+			expectErr:       true,
+			expectedErrType: new(*EvaluationError),
+			errMsg:          "mutation value cannot be empty",
 		},
 		{
 			name:        "plrNamespace variable",
@@ -106,11 +110,12 @@ func TestCompiledProgram_Evaluate_TypeSafety(t *testing.T) {
 			},
 		},
 		{
-			name:        "pacEventType variable with missing label",
-			expression:  `annotation("event-type", pacEventType)`,
-			pipelineRun: pipelineRun,
-			expectErr:   true,
-			errMsg:      "mutation value cannot be empty",
+			name:            "pacEventType variable with missing label",
+			expression:      `annotation("event-type", pacEventType)`,
+			pipelineRun:     pipelineRun,
+			expectErr:       true,
+			expectedErrType: new(*EvaluationError),
+			errMsg:          "mutation value cannot be empty",
 		},
 		{
 			name:       "pacTestEventType variable with existing label",
@@ -134,11 +139,12 @@ func TestCompiledProgram_Evaluate_TypeSafety(t *testing.T) {
 			},
 		},
 		{
-			name:        "pacTestEventType variable with missing label",
-			expression:  `annotation("test-event-type", pacTestEventType)`,
-			pipelineRun: pipelineRun,
-			expectErr:   true,
-			errMsg:      "mutation value cannot be empty",
+			name:            "pacTestEventType variable with missing label",
+			expression:      `annotation("test-event-type", pacTestEventType)`,
+			pipelineRun:     pipelineRun,
+			expectErr:       true,
+			expectedErrType: new(*EvaluationError),
+			errMsg:          "mutation value cannot be empty",
 		},
 		{
 			name:        "safe pacEventType usage with conditional",
@@ -246,6 +252,9 @@ func TestCompiledProgram_Evaluate_TypeSafety(t *testing.T) {
 				g.Expect(err).To(HaveOccurred())
 				if tt.errMsg != "" {
 					g.Expect(err.Error()).To(ContainSubstring(tt.errMsg))
+				}
+				if tt.expectedErrType != nil {
+					g.Expect(errors.As(err, tt.expectedErrType)).To(BeTrue(), "expected %T, got %T: %v", tt.expectedErrType, err, err)
 				}
 				return
 			}

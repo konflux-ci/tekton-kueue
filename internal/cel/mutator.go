@@ -83,7 +83,7 @@ func (m *CELMutator) Mutate(pipelineRun *tekv1.PipelineRun) error {
 		pipelineRun, err = mutate(pipelineRun, mutation)
 		if err != nil {
 			RecordMutationFailure()
-			return fmt.Errorf("failed to apply mutation (type: %s, key: %s): %w", mutation.Type, mutation.Key, err)
+			return &EvaluationError{Err: fmt.Errorf("failed to apply mutation (type: %s, key: %s): %w", mutation.Type, mutation.Key, err)}
 		}
 	}
 

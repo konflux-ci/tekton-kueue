@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"errors"
 	"maps"
 	"testing"
 
@@ -179,6 +180,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 		expectedLabels      map[string]string
 		expectedAnnotations map[string]string
 		expectErr           bool
+		expectedErrType     any // target for errors.As (e.g., new(*EvaluationError))
 		errMsg              string
 	}{
 		{
@@ -290,6 +292,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 			initialLabels:      nil,
 			initialAnnotations: nil,
 			expectErr:          true,
+			expectedErrType:    new(*EvaluationError),
 			errMsg:             "annotation key cannot be empty",
 		},
 		{
@@ -437,6 +440,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 			expectedLabels:      nil,
 			expectedAnnotations: nil,
 			expectErr:           true,
+			expectedErrType:     new(*EvaluationError),
 		},
 		// Config.yaml expression tests
 		{
@@ -735,6 +739,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 			expectedLabels:      nil,
 			expectedAnnotations: nil,
 			expectErr:           true,
+			expectedErrType:     new(*EvaluationError),
 			errMsg:              "failed to parse existing resource value \"invalid\" as integer",
 		},
 		{
@@ -829,6 +834,9 @@ func TestCELMutator_Mutate(t *testing.T) {
 				if tt.errMsg != "" {
 					g.Expect(err.Error()).To(ContainSubstring(tt.errMsg))
 				}
+				if tt.expectedErrType != nil {
+					g.Expect(errors.As(err, tt.expectedErrType)).To(BeTrue(), "expected %T, got %T: %v", tt.expectedErrType, err, err)
+				}
 				return
 			}
 
@@ -855,6 +863,36 @@ func TestCELMutator_Mutate_NilPipelineRun(t *testing.T) {
 	err = mutator.Mutate(nil)
 
 	g.Expect(err).To(HaveOccurred())
+}
+
+func TestCELMutator_Mutate_ValidationError(t *testing.T) {
+	g := NewWithT(t)
+
+	programs, err := CompileCELPrograms([]string{
+		`label("env", "test")`,
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	mutator := NewCELMutator(programs)
+
+	// PipelineRun with neither pipelineRef nor pipelineSpec is invalid
+	pipelineRun := &tekv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pipeline",
+			Namespace: "test-namespace",
+		},
+	}
+
+	err = mutator.Mutate(pipelineRun)
+	g.Expect(err).To(HaveOccurred())
+
+	var validationErr *ValidationError
+	g.Expect(errors.As(err, &validationErr)).To(BeTrue(), "expected *ValidationError, got %T", err)
+	g.Expect(err.Error()).To(ContainSubstring("expected exactly one, got neither: pipelineRef, pipelineSpec"))
+
+	// Verify it is NOT an EvaluationError
+	var evalErr *EvaluationError
+	g.Expect(errors.As(err, &evalErr)).To(BeFalse(), "should not be *EvaluationError")
 }
 
 func TestCELMutator_EmptyPrograms(t *testing.T) {

@@ -181,6 +181,38 @@ spec: {}
 		})
 	})
 
+	Context("with CEL evaluation error", func() {
+		It("should return InternalServerError when a CEL expression fails at runtime", func() {
+			// Write config with a CEL expression that accesses a non-existent field
+			configPath := filepath.Join(tmpDir, "config.yaml")
+			configContent := `
+queueName: "test-queue"
+cel:
+  expressions:
+    - 'annotation("key", pipelineRun.doesNotExist)'
+`
+			Expect(os.WriteFile(configPath, []byte(configContent), 0644)).To(Succeed())
+
+			// Write a valid PipelineRun
+			plrContent := `apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: test-pipelinerun
+spec:
+  pipelineRef:
+    name: my-pipeline
+`
+			plrPath := filepath.Join(tmpDir, "pipelinerun.yaml")
+			Expect(os.WriteFile(plrPath, []byte(plrContent), 0644)).To(Succeed())
+
+			// Call MutatePipelineRun - should fail with an InternalServerError
+			_, err := MutatePipelineRun(plrPath, tmpDir)
+			Expect(err).To(HaveOccurred())
+			Expect(k8serrors.IsInternalError(err)).To(BeTrue(), "expected InternalServerError, got: %v", err)
+			Expect(err.Error()).To(ContainSubstring("CEL evaluation failed"))
+		})
+	})
+
 	Context("with invalid inputs", func() {
 		It("should reject empty pipelineRunFile", func() {
 			_, err := MutatePipelineRun("", "/tmp")

@@ -116,6 +116,10 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 			if errors.As(err, &validationErr) {
 				return k8serrors.NewBadRequest(validationErr.Error())
 			}
+			var evaluationErr *cel.EvaluationError
+			if errors.As(err, &evaluationErr) {
+				return k8serrors.NewInternalError(evaluationErr)
+			}
 			return err
 		}
 	}
