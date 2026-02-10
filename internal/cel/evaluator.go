@@ -9,6 +9,36 @@ import (
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
+// ValidationError indicates that a PipelineRun failed validation during
+// CEL evaluation (e.g., json.Marshal failed on a malformed resource).
+type ValidationError struct {
+	Err error
+}
+
+func (e *ValidationError) Error() string {
+	return fmt.Sprintf("pipelinerun validation failed: %v", e.Err)
+}
+
+func (e *ValidationError) Unwrap() error {
+	return e.Err
+}
+
+// EvaluationError indicates that a CEL expression failed to evaluate.
+// This represents a server-side issue (e.g., bad CEL configuration,
+// runtime error in expression, or result conversion failure) rather
+// than a problem with the PipelineRun itself.
+type EvaluationError struct {
+	Err error
+}
+
+func (e *EvaluationError) Error() string {
+	return fmt.Sprintf("CEL evaluation failed: %v", e.Err)
+}
+
+func (e *EvaluationError) Unwrap() error {
+	return e.Err
+}
+
 // CompiledProgram represents a type-safe compiled CEL program
 // Input: *tekv1.PipelineRun
 // Output: []MutationRequest
@@ -28,7 +58,7 @@ func (cp *CompiledProgram) Evaluate(pipelineRun *tekv1.PipelineRun) ([]*Mutation
 
 	pipelineRunMap, err := structToCELMap(pipelineRun)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert PipelineRun to map: %w", err)
+		return nil, &ValidationError{Err: fmt.Errorf("failed to convert PipelineRun to map: %w", err)}
 	}
 
 	// Create the evaluation context
@@ -49,21 +79,21 @@ func (cp *CompiledProgram) Evaluate(pipelineRun *tekv1.PipelineRun) ([]*Mutation
 	out, _, err := cp.program.Eval(vars)
 	if err != nil {
 		RecordEvaluationFailure()
-		return nil, fmt.Errorf("failed to evaluate CEL expression %q: %w", cp.expression, err)
+		return nil, &EvaluationError{Err: fmt.Errorf("failed to evaluate CEL expression %q: %w", cp.expression, err)}
 	}
 
 	// Convert the result to []MutationRequest with validation
 	mutations, err := convertToMutationRequests(out)
 	if err != nil {
 		RecordEvaluationFailure()
-		return nil, fmt.Errorf("failed to convert result to MutationRequests for expression %q: %w", cp.expression, err)
+		return nil, &EvaluationError{Err: fmt.Errorf("failed to convert result to MutationRequests for expression %q: %w", cp.expression, err)}
 	}
 
 	// Validate all mutations
 	for i, mutation := range mutations {
 		if err := mutation.Validate(); err != nil {
 			RecordEvaluationFailure()
-			return nil, fmt.Errorf("invalid mutation at index %d for expression %q: %w", i, cp.expression, err)
+			return nil, &EvaluationError{Err: fmt.Errorf("invalid mutation at index %d for expression %q: %w", i, cp.expression, err)}
 		}
 	}
 

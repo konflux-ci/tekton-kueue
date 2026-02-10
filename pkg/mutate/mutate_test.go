@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/yaml"
 )
 
@@ -32,6 +33,15 @@ func TestMutate(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Mutate Suite")
 }
+
+const validPipelineRunYAML = `apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: test-pipelinerun
+spec:
+  pipelineRef:
+    name: my-pipeline
+`
 
 var _ = Describe("MutatePipelineRun", func() {
 	var (
@@ -55,16 +65,8 @@ var _ = Describe("MutatePipelineRun", func() {
 			Expect(os.WriteFile(configPath, []byte(`queueName: "test-queue"`), 0644)).To(Succeed())
 
 			// Write PipelineRun file
-			plrContent := `apiVersion: tekton.dev/v1
-kind: PipelineRun
-metadata:
-  name: test-pipelinerun
-spec:
-  pipelineRef:
-    name: my-pipeline
-`
 			plrPath := filepath.Join(tmpDir, "pipelinerun.yaml")
-			Expect(os.WriteFile(plrPath, []byte(plrContent), 0644)).To(Succeed())
+			Expect(os.WriteFile(plrPath, []byte(validPipelineRunYAML), 0644)).To(Succeed())
 
 			// Call MutatePipelineRun
 			mutatedData, err := MutatePipelineRun(plrPath, tmpDir)
@@ -74,6 +76,35 @@ spec:
 			var pipelineRun tekv1.PipelineRun
 			Expect(yaml.Unmarshal(mutatedData, &pipelineRun)).To(Succeed())
 			Expect(pipelineRun.Labels[common.QueueLabel]).To(Equal("test-queue"))
+			Expect(pipelineRun.Spec.Status).To(Equal(tekv1.PipelineRunSpecStatus(tekv1.PipelineRunSpecStatusPending)))
+		})
+
+		It("should mutate a PipelineRun with a CEL expression", func() {
+			// Write config file with CEL expressions
+			configPath := filepath.Join(tmpDir, "config.yaml")
+			configContent := `
+queueName: "test-queue"
+cel:
+  expressions:
+    - 'label("env", "production")'
+    - 'annotation("team", "platform")'
+`
+			Expect(os.WriteFile(configPath, []byte(configContent), 0644)).To(Succeed())
+
+			// Write PipelineRun file
+			plrPath := filepath.Join(tmpDir, "pipelinerun.yaml")
+			Expect(os.WriteFile(plrPath, []byte(validPipelineRunYAML), 0644)).To(Succeed())
+
+			// Call MutatePipelineRun
+			mutatedData, err := MutatePipelineRun(plrPath, tmpDir)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Parse and validate
+			var pipelineRun tekv1.PipelineRun
+			Expect(yaml.Unmarshal(mutatedData, &pipelineRun)).To(Succeed())
+			Expect(pipelineRun.Labels[common.QueueLabel]).To(Equal("test-queue"))
+			Expect(pipelineRun.Labels["env"]).To(Equal("production"))
+			Expect(pipelineRun.Annotations["team"]).To(Equal("platform"))
 			Expect(pipelineRun.Spec.Status).To(Equal(tekv1.PipelineRunSpecStatus(tekv1.PipelineRunSpecStatusPending)))
 		})
 
@@ -114,9 +145,16 @@ spec:
 
 	Context("with invalid PipelineRun", func() {
 		It("should reject a PipelineRun with neither pipelineRef nor pipelineSpec", func() {
-			// Write config file
+			// Write config file with a CEL expression so the CEL mutator is created
+			// and Validate() runs on the PipelineRun copy.
 			configPath := filepath.Join(tmpDir, "config.yaml")
-			Expect(os.WriteFile(configPath, []byte(`queueName: "test-queue"`), 0644)).To(Succeed())
+			configContent := `
+queueName: "test-queue"
+cel:
+  expressions:
+    - 'label("env", "test")'
+`
+			Expect(os.WriteFile(configPath, []byte(configContent), 0644)).To(Succeed())
 
 			// Write invalid PipelineRun file
 			plrContent := `apiVersion: tekton.dev/v1
@@ -128,9 +166,35 @@ spec: {}
 			plrPath := filepath.Join(tmpDir, "pipelinerun.yaml")
 			Expect(os.WriteFile(plrPath, []byte(plrContent), 0644)).To(Succeed())
 
-			// Call MutatePipelineRun - should fail
+			// Call MutatePipelineRun - should fail with a BadRequest error
 			_, err := MutatePipelineRun(plrPath, tmpDir)
 			Expect(err).To(HaveOccurred())
+			Expect(k8serrors.IsBadRequest(err)).To(BeTrue(), "expected BadRequest error, got: %v", err)
+			Expect(err.Error()).To(ContainSubstring("expected exactly one, got neither: pipelineRef, pipelineSpec"))
+		})
+	})
+
+	Context("with CEL evaluation error", func() {
+		It("should return InternalServerError when a CEL expression fails at runtime", func() {
+			// Write config with a CEL expression that accesses a non-existent field
+			configPath := filepath.Join(tmpDir, "config.yaml")
+			configContent := `
+queueName: "test-queue"
+cel:
+  expressions:
+    - 'annotation("key", pipelineRun.doesNotExist)'
+`
+			Expect(os.WriteFile(configPath, []byte(configContent), 0644)).To(Succeed())
+
+			// Write a valid PipelineRun
+			plrPath := filepath.Join(tmpDir, "pipelinerun.yaml")
+			Expect(os.WriteFile(plrPath, []byte(validPipelineRunYAML), 0644)).To(Succeed())
+
+			// Call MutatePipelineRun - should fail with an InternalServerError
+			_, err := MutatePipelineRun(plrPath, tmpDir)
+			Expect(err).To(HaveOccurred())
+			Expect(k8serrors.IsInternalError(err)).To(BeTrue(), "expected InternalServerError, got: %v", err)
+			Expect(err.Error()).To(ContainSubstring("CEL evaluation failed"))
 		})
 	})
 

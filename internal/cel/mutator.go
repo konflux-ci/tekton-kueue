@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -37,6 +38,11 @@ func NewCELMutator(programs []*CompiledProgram) *CELMutator {
 // It evaluates each compiled program and applies the resulting mutations
 // to the PipelineRun's labels and annotations.
 //
+// A deep copy of the PipelineRun with defaults applied is used for CEL
+// evaluation (required for JSON marshaling in structToCELMap), but all
+// mutations are applied to the original PipelineRun to avoid permanently
+// overriding cluster-level defaults (e.g., TektonConfig timeouts).
+//
 // The PipelineRun is modified in-place. If any evaluation fails, the method
 // returns an error and the PipelineRun may be partially modified.
 //
@@ -46,7 +52,29 @@ func NewCELMutator(programs []*CompiledProgram) *CELMutator {
 // Returns:
 //   - error: Any error that occurred during evaluation or mutation
 func (m *CELMutator) Mutate(pipelineRun *tekv1.PipelineRun) error {
-	mutations, err := m.evaluate(pipelineRun)
+	if pipelineRun == nil {
+		return fmt.Errorf("pipelineRun cannot be nil")
+	}
+
+	// Nothing to evaluate — skip deep copy, defaults, and validation.
+	if len(m.programs) == 0 {
+		RecordMutationSuccess()
+		return nil
+	}
+
+	// Deep copy, set defaults, and validate for CEL evaluation. The copy is
+	// needed because structToCELMap (json.Marshal) can fail on PipelineRuns
+	// without defaults (e.g., missing ParamSpec.Type). We must not set defaults
+	// on the original to avoid overriding cluster-level TektonConfig defaults
+	// like timeouts.
+	plrCopy := pipelineRun.DeepCopy()
+	plrCopy.Spec.SetDefaults(context.TODO())
+
+	if errs := plrCopy.Spec.Validate(context.TODO()); errs != nil {
+		return &ValidationError{Err: fmt.Errorf("invalid pipelinerun: %v", errs)}
+	}
+
+	mutations, err := m.evaluate(plrCopy)
 	if err != nil {
 		return err
 	}
@@ -55,7 +83,7 @@ func (m *CELMutator) Mutate(pipelineRun *tekv1.PipelineRun) error {
 		pipelineRun, err = mutate(pipelineRun, mutation)
 		if err != nil {
 			RecordMutationFailure()
-			return fmt.Errorf("failed to apply mutation (type: %s, key: %s): %w", mutation.Type, mutation.Key, err)
+			return &EvaluationError{Err: fmt.Errorf("failed to apply mutation (type: %s, key: %s): %w", mutation.Type, mutation.Key, err)}
 		}
 	}
 

@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"errors"
 	"maps"
 	"testing"
 
@@ -36,11 +37,11 @@ const (
 	buildPlatformsExpression = `has(pipelineRun.spec.params) &&
 		pipelineRun.spec.params.exists(p, p.name == 'build-platforms') ?
 		pipelineRun.spec.params.filter(
-		  p, 
+		  p,
 		  p.name == 'build-platforms')[0]
 		.value.map(
 		  p,
-		  annotation("kueue.konflux-ci.dev/requests-" + replace(p, "/", "-"), "1") 
+		  annotation("kueue.konflux-ci.dev/requests-" + replace(p, "/", "-"), "1")
 		) : []`
 
 	oldStylePlatformsExpression = `has(pipelineRun.spec.pipelineSpec) &&
@@ -94,7 +95,8 @@ func getBuildPlatformsParamsSmall() []tekv1.Param {
 func getPipelineTasksWithPlatforms() []tekv1.PipelineTask {
 	return []tekv1.PipelineTask{
 		{
-			Name: "build-arm64",
+			Name:    "build-arm64",
+			TaskRef: &tekv1.TaskRef{Name: "build-task"},
 			Params: []tekv1.Param{
 				{
 					Name:  "PLATFORM",
@@ -103,7 +105,8 @@ func getPipelineTasksWithPlatforms() []tekv1.PipelineTask {
 			},
 		},
 		{
-			Name: "build-amd64",
+			Name:    "build-amd64",
+			TaskRef: &tekv1.TaskRef{Name: "build-task"},
 			Params: []tekv1.Param{
 				{
 					Name:  "PLATFORM",
@@ -112,7 +115,8 @@ func getPipelineTasksWithPlatforms() []tekv1.PipelineTask {
 			},
 		},
 		{
-			Name: "build-s390x",
+			Name:    "build-s390x",
+			TaskRef: &tekv1.TaskRef{Name: "build-task"},
 			Params: []tekv1.Param{
 				{
 					Name:  "PLATFORM",
@@ -121,7 +125,8 @@ func getPipelineTasksWithPlatforms() []tekv1.PipelineTask {
 			},
 		},
 		{
-			Name: "no-platform-task",
+			Name:    "no-platform-task",
+			TaskRef: &tekv1.TaskRef{Name: "other-task"},
 			// No PLATFORM parameter
 		},
 	}
@@ -131,7 +136,8 @@ func getPipelineTasksWithPlatforms() []tekv1.PipelineTask {
 func getPipelineTasksWithoutPlatforms() []tekv1.PipelineTask {
 	return []tekv1.PipelineTask{
 		{
-			Name: "setup",
+			Name:    "setup",
+			TaskRef: &tekv1.TaskRef{Name: "setup-task"},
 			Params: []tekv1.Param{
 				{
 					Name:  "VERSION",
@@ -140,7 +146,8 @@ func getPipelineTasksWithoutPlatforms() []tekv1.PipelineTask {
 			},
 		},
 		{
-			Name: "cleanup",
+			Name:    "cleanup",
+			TaskRef: &tekv1.TaskRef{Name: "cleanup-task"},
 			// No parameters
 		},
 	}
@@ -173,6 +180,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 		expectedLabels      map[string]string
 		expectedAnnotations map[string]string
 		expectErr           bool
+		expectedErrType     any // target for errors.As (e.g., new(*EvaluationError))
 		errMsg              string
 	}{
 		{
@@ -284,6 +292,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 			initialLabels:      nil,
 			initialAnnotations: nil,
 			expectErr:          true,
+			expectedErrType:    new(*EvaluationError),
 			errMsg:             "annotation key cannot be empty",
 		},
 		{
@@ -431,6 +440,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 			expectedLabels:      nil,
 			expectedAnnotations: nil,
 			expectErr:           true,
+			expectedErrType:     new(*EvaluationError),
 		},
 		// Config.yaml expression tests
 		{
@@ -489,7 +499,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 			initialLabels:       nil,
 			initialAnnotations:  nil,
 			initialParams:       nil,
-			pipelineSpec:        &tekv1.PipelineSpec{},
+			pipelineSpec:        &tekv1.PipelineSpec{Description: "test pipeline"},
 			expectedLabels:      nil,
 			expectedAnnotations: nil,
 			expectErr:           false,
@@ -729,6 +739,7 @@ func TestCELMutator_Mutate(t *testing.T) {
 			expectedLabels:      nil,
 			expectedAnnotations: nil,
 			expectErr:           true,
+			expectedErrType:     new(*EvaluationError),
 			errMsg:              "failed to parse existing resource value \"invalid\" as integer",
 		},
 		{
@@ -823,6 +834,9 @@ func TestCELMutator_Mutate(t *testing.T) {
 				if tt.errMsg != "" {
 					g.Expect(err.Error()).To(ContainSubstring(tt.errMsg))
 				}
+				if tt.expectedErrType != nil {
+					g.Expect(errors.As(err, tt.expectedErrType)).To(BeTrue(), "expected %T, got %T: %v", tt.expectedErrType, err, err)
+				}
 				return
 			}
 
@@ -849,6 +863,36 @@ func TestCELMutator_Mutate_NilPipelineRun(t *testing.T) {
 	err = mutator.Mutate(nil)
 
 	g.Expect(err).To(HaveOccurred())
+}
+
+func TestCELMutator_Mutate_ValidationError(t *testing.T) {
+	g := NewWithT(t)
+
+	programs, err := CompileCELPrograms([]string{
+		`label("env", "test")`,
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	mutator := NewCELMutator(programs)
+
+	// PipelineRun with neither pipelineRef nor pipelineSpec is invalid
+	pipelineRun := &tekv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pipeline",
+			Namespace: "test-namespace",
+		},
+	}
+
+	err = mutator.Mutate(pipelineRun)
+	g.Expect(err).To(HaveOccurred())
+
+	var validationErr *ValidationError
+	g.Expect(errors.As(err, &validationErr)).To(BeTrue(), "expected *ValidationError, got %T", err)
+	g.Expect(err.Error()).To(ContainSubstring("expected exactly one, got neither: pipelineRef, pipelineSpec"))
+
+	// Verify it is NOT an EvaluationError
+	var evalErr *EvaluationError
+	g.Expect(errors.As(err, &evalErr)).To(BeFalse(), "should not be *EvaluationError")
 }
 
 func TestCELMutator_EmptyPrograms(t *testing.T) {
