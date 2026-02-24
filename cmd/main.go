@@ -52,7 +52,7 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
-	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 )
 
 var (
