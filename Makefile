@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= tekton-kueue:latest
+IMG ?= localhost/tekton-kueue:local
 KIND_CLUSTER ?= kind
 RELEASE_DIR ?= release
 VERSION ?= nightly
@@ -79,7 +79,7 @@ test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated 
 		echo "No Kind cluster is running. Please start a Kind cluster before running the e2e tests."; \
 		exit 1; \
 	}
-	go test ./test/e2e/ -v -ginkgo.v
+	IMG=${IMG} go test ./test/e2e/ -v -ginkgo.v
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
