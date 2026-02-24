@@ -48,7 +48,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	kapi "knative.dev/pkg/apis"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	"sigs.k8s.io/kueue/pkg/controller/jobframework"
 )
 
@@ -485,11 +485,11 @@ var _ = Describe("Manager", Ordered, func() {
 						return err
 					}
 					const defaultPriorityClassName = "tekton-kueue-default"
-					if wl.Spec.PriorityClassName != defaultPriorityClassName {
+					if wl.Spec.PriorityClassRef.Name != defaultPriorityClassName {
 						return fmt.Errorf(
 							"Workload should have priority class %s, but has %s",
 							defaultPriorityClassName,
-							wl.Spec.PriorityClassName,
+							wl.Spec.PriorityClassRef.Name,
 						)
 					}
 					return err
