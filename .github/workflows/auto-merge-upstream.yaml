@@ -1,0 +1,45 @@
+# Generated for Konflux Application openshift-pipelines-core by openshift-pipelines/hack. DO NOT EDIT
+name: auto-merge-upstream
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0,30 * * * *"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  collect-branches:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Get branches matching pattern
+        id: set-matrix
+        run: |
+          # List all branches and filter
+          branches=$(gh api repos/${{ github.repository }}/branches --paginate -q '.[] | .name' | grep -E '^(release-v.*\.x$|next$)')
+          echo "Found branches:"
+          echo "$branches"
+          # Convert to JSON array for matrix
+          json=$(jq -nc --argjson arr "$(printf '%s\n' "$branches" | jq -R . | jq -s .)" '{branch: $arr}')
+          echo "Matrix JSON: $json"
+          echo "matrix=$json" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  auto-merge-upstream-all:
+    needs: collect-branches
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.collect-branches.outputs.matrix) }}
+    steps:
+      - name: Trigger auto-merge-upstream for ${{ matrix.branch }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo Triggering workflow for branch: ${{ matrix.branch }}
+          
+          gh workflow run "auto-merge-upstream.yaml" \
+                                                                                                                                                                                                                                                                                                              --ref ${{ matrix.branch }} \
+                                                                                                                                                                                                                                                                                                              --repo ${{ github.repository }}
