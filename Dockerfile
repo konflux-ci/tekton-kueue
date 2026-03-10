@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25.7-1773016755@sha256:388a0dbade7c411085a19322508715b0e2de33c0602f6fb624c9a7f4ce9e3d5b AS builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25.7-1773088126@sha256:632bb2d1e3c0c3450d8ce9627e81aed7b340ca84d9700db61d510752cf0f506b AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
