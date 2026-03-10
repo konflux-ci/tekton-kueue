@@ -13,10 +13,10 @@ func MustParseV1PipelineRun(t GinkgoTInterface, yaml string) *v1.PipelineRun {
 	yaml = `apiVersion: tekton.dev/v1
 kind: PipelineRun
 ` + yaml
-	mustParseYAML(t, yaml, &pr)
+	MustParseYAML(t, yaml, &pr)
 	return &pr
 }
-func mustParseYAML(t GinkgoTInterface, yaml string, i runtime.Object) {
+func MustParseYAML(t GinkgoTInterface, yaml string, i runtime.Object) {
 	if _, _, err := scheme.Codecs.UniversalDeserializer().Decode([]byte(yaml), nil, i); err != nil {
 		t.Fatalf("mustParseYAML (%s): %v", yaml, err)
 	}
