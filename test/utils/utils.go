@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:golint,revive,staticcheck
@@ -180,7 +181,7 @@ func GetProjectDir() (string, error) {
 	if err != nil {
 		return wd, err
 	}
-	wd = strings.ReplaceAll(wd, "/test/e2e", "")
+	wd = regexp.MustCompile(`/test/e2e.*`).ReplaceAllString(wd, "")
 	return wd, nil
 }
 

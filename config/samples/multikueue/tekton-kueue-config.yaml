@@ -1,0 +1,14 @@
+apiVersion: v1
+data:
+  config.yaml: |
+    queueName: pipelines-queue
+    multiKueueOverride: true
+    cel:
+      expressions:
+        - priority("tekton-kueue-default")
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/part-of: tekton-kueue
+  name: tekton-kueue-config
+  namespace: tekton-kueue
