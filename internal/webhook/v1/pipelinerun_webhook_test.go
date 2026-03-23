@@ -92,6 +92,58 @@ var _ = Describe("PipelineRun Webhook", func() {
 			})
 		})
 
+		Context("when DefaultServiceAccount is set", func() {
+			It("should set the serviceAccountName if unset", func(ctx context.Context) {
+				cfg := &config.Config{
+					QueueName:             "test-queue",
+					DefaultServiceAccount: "pipeline",
+				}
+				cfgStore := &ConfigStore{
+					config: cfg,
+				}
+				var err error
+				defaulter, err = NewCustomDefaulter(cfgStore)
+				Expect(err).NotTo(HaveOccurred())
+				err = defaulter.Default(ctx, plr)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plr.Spec.TaskRunTemplate.ServiceAccountName).To(Equal("pipeline"))
+			})
+
+			It("should not override an explicit serviceAccountName", func(ctx context.Context) {
+				plr.Spec.TaskRunTemplate.ServiceAccountName = "custom-sa"
+				cfg := &config.Config{
+					QueueName:             "test-queue",
+					DefaultServiceAccount: "pipeline",
+				}
+				cfgStore := &ConfigStore{
+					config: cfg,
+				}
+				var err error
+				defaulter, err = NewCustomDefaulter(cfgStore)
+				Expect(err).NotTo(HaveOccurred())
+				err = defaulter.Default(ctx, plr)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plr.Spec.TaskRunTemplate.ServiceAccountName).To(Equal("custom-sa"))
+			})
+		})
+
+		Context("when DefaultServiceAccount is not set", func() {
+			It("should leave serviceAccountName empty", func(ctx context.Context) {
+				cfg := &config.Config{
+					QueueName: "test-queue",
+				}
+				cfgStore := &ConfigStore{
+					config: cfg,
+				}
+				var err error
+				defaulter, err = NewCustomDefaulter(cfgStore)
+				Expect(err).NotTo(HaveOccurred())
+				err = defaulter.Default(ctx, plr)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plr.Spec.TaskRunTemplate.ServiceAccountName).To(BeEmpty())
+			})
+		})
+
 		It("should set the queue name", func(ctx context.Context) {
 			cfg := &config.Config{
 				QueueName: "test-queue",

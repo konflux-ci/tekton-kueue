@@ -73,6 +73,30 @@ var _ = Describe("Config Store ", func() {
 		})
 	})
 
+	Context("Test DefaultServiceAccount", func() {
+		It("When DefaultServiceAccount is set", func(ctx context.Context) {
+			configData := "queueName: test-queue\ndefaultServiceAccount: pipeline"
+			cfgStore := &ConfigStore{}
+			err := cfgStore.Update([]byte(configData))
+			Expect(err).NotTo(HaveOccurred())
+
+			cfg, mutators := cfgStore.GetConfigAndMutators()
+			Expect(mutators).To(BeEmpty())
+			Expect(cfg.DefaultServiceAccount).To(Equal("pipeline"))
+		})
+
+		It("When DefaultServiceAccount is not set", func(ctx context.Context) {
+			configData := "queueName: test-queue"
+			cfgStore := &ConfigStore{}
+			err := cfgStore.Update([]byte(configData))
+			Expect(err).NotTo(HaveOccurred())
+
+			cfg, mutators := cfgStore.GetConfigAndMutators()
+			Expect(mutators).To(BeEmpty())
+			Expect(cfg.DefaultServiceAccount).To(BeEmpty())
+		})
+	})
+
 	Context("Test CEL", func() {
 		configData := "queueName: pipelines-queue\ncel:\n  expressions:\n    - priority(\"tekton-kueue-default\")\n"
 		It("When CEL is set", func(ctx context.Context) {

@@ -110,6 +110,9 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	if config.MultiKueueOverride {
 		plr.Spec.ManagedBy = ptr.To(common.ManagedByMultiKueueLabel)
 	}
+	if plr.Spec.TaskRunTemplate.ServiceAccountName == "" && config.DefaultServiceAccount != "" {
+		plr.Spec.TaskRunTemplate.ServiceAccountName = config.DefaultServiceAccount
+	}
 	for _, mutator := range mutators {
 		if err := mutator.Mutate(plr); err != nil {
 			var validationErr *cel.ValidationError
