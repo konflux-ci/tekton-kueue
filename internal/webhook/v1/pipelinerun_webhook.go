@@ -20,84 +20,186 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 
-	"github.com/go-logr/logr"
 	"github.com/konflux-ci/tekton-kueue/internal/cel"
 	"github.com/konflux-ci/tekton-kueue/pkg/common"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/klog/v2"
-	"k8s.io/utils/ptr"
+	"gomodules.xyz/jsonpatch/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-// SetupPipelineRunWebhookWithManager registers the webhook for PipelineRun in the manager.
-func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.CustomDefaulter) error {
-	return ctrl.NewWebhookManagedBy(mgr).For(&tekv1.PipelineRun{}).
-		WithDefaulter(defaulter).
-		WithLogConstructor(logConstructor).
-		Complete()
+// +kubebuilder:webhook:path=/mutate-tekton-dev-v1-pipelinerun,mutating=true,failurePolicy=fail,sideEffects=None,groups=tekton.dev,resources=pipelineruns,verbs=create,versions=v1,name=pipelinerun-kueue-defaulter.tekton-kueue.io,admissionReviewVersions=v1
+
+// PipelineRunWebhookHandler handles PipelineRun admission requests using
+// explicit JSON patches. This avoids controller-runtime's CustomDefaulter
+// pattern which serializes the full Go struct and can leak zero-value fields
+// into the patch, interfering with downstream webhook defaulting.
+//
+// See: https://github.com/tektoncd/pipeline/issues/9647
+type PipelineRunWebhookHandler struct {
+	configStore *ConfigStore
+	decoder     admission.Decoder
 }
 
-func logConstructor(base logr.Logger, req *admission.Request) logr.Logger {
-	gvk := (&tekv1.PipelineRun{}).GetGroupVersionKind()
-	log := base.WithValues(
-		"webhookGroup", gvk.Group,
-		"webhookKind", gvk.Kind,
-	)
-	if req != nil {
-		log = log.WithValues(
-			"webhookGroup", tekv1.SchemeGroupVersion.Group,
-			"webhookKind", gvk.Kind,
-			gvk.Kind, klog.KRef(req.Namespace, req.Name),
-			"namespace", req.Namespace,
-			"name", req.Name,
-			"resource", req.Resource,
-			"user", req.UserInfo.Username,
-			"requestID", req.UID,
-		)
+func NewWebhookHandler(configStore *ConfigStore, decoder admission.Decoder) *PipelineRunWebhookHandler {
+	return &PipelineRunWebhookHandler{
+		configStore: configStore,
+		decoder:     decoder,
+	}
+}
 
-		if a, err := meta.Accessor(req.Object); err == nil {
-			if a.GetName() == "" {
-				// add the generate name only if the name is unset
-				return log.WithValues("generateName", a.GetGenerateName())
+// Handle builds explicit JSON patches for only the fields we intend to modify.
+// No struct round-tripping means no zero-value field leaks.
+func (h *PipelineRunWebhookHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
+	plr := &tekv1.PipelineRun{}
+	if err := h.decoder.Decode(req, plr); err != nil {
+		return admission.Errored(http.StatusBadRequest, fmt.Errorf("expected a PipelineRun object: %w", err))
+	}
+
+	config, mutators := h.configStore.GetConfigAndMutators()
+
+	var patches []jsonpatch.JsonPatchOperation
+
+	// 1. Set spec.status = PipelineRunPending
+	patches = append(patches, jsonpatch.JsonPatchOperation{
+		Operation: "add",
+		Path:      "/spec/status",
+		Value:     string(tekv1.PipelineRunSpecStatusPending),
+	})
+
+	// 2. Add queue label
+	if plr.Labels == nil {
+		patches = append(patches, jsonpatch.JsonPatchOperation{
+			Operation: "add",
+			Path:      "/metadata/labels",
+			Value:     map[string]string{common.QueueLabel: config.QueueName},
+		})
+	} else if _, exists := plr.Labels[common.QueueLabel]; !exists {
+		patches = append(patches, jsonpatch.JsonPatchOperation{
+			Operation: "add",
+			Path:      "/metadata/labels/" + escapeJSONPointer(common.QueueLabel),
+			Value:     config.QueueName,
+		})
+	}
+
+	// 3. Set managedBy if multiKueueOverride is enabled
+	if config.MultiKueueOverride {
+		patches = append(patches, jsonpatch.JsonPatchOperation{
+			Operation: "add",
+			Path:      "/spec/managedBy",
+			Value:     common.ManagedByMultiKueueLabel,
+		})
+	}
+
+	// 4. Apply CEL mutations. CEL only modifies labels, annotations, and
+	//    resource annotations — all metadata, no spec fields. We apply them
+	//    to the decoded struct then diff only the metadata to build patches.
+	if len(mutators) > 0 {
+		// Deep copy so CEL mutations don't affect our original
+		plrForCEL := plr.DeepCopy()
+		for _, mutator := range mutators {
+			if err := mutator.Mutate(plrForCEL); err != nil {
+				var validationErr *cel.ValidationError
+				if errors.As(err, &validationErr) {
+					return admission.Errored(http.StatusBadRequest, validationErr)
+				}
+				var evaluationErr *cel.EvaluationError
+				if errors.As(err, &evaluationErr) {
+					return admission.Errored(http.StatusInternalServerError, evaluationErr)
+				}
+				return admission.Errored(http.StatusInternalServerError, err)
+			}
+		}
+		celPatches := metadataDiffPatches(plr, plrForCEL)
+		patches = append(patches, celPatches...)
+	}
+
+	return admission.Patched("kueue defaults applied", patches...)
+}
+
+// metadataDiffPatches computes JSON patches for label and annotation changes
+// between original and mutated PipelineRuns. Only metadata is compared —
+// spec fields are excluded to prevent zero-value leaks.
+func metadataDiffPatches(original, mutated *tekv1.PipelineRun) []jsonpatch.JsonPatchOperation {
+	var patches []jsonpatch.JsonPatchOperation
+
+	// Diff labels
+	if mutated.Labels != nil {
+		if original.Labels == nil {
+			patches = append(patches, jsonpatch.JsonPatchOperation{
+				Operation: "add",
+				Path:      "/metadata/labels",
+				Value:     mutated.Labels,
+			})
+		} else {
+			for k, v := range mutated.Labels {
+				if original.Labels[k] != v {
+					patches = append(patches, jsonpatch.JsonPatchOperation{
+						Operation: "add",
+						Path:      "/metadata/labels/" + escapeJSONPointer(k),
+						Value:     v,
+					})
+				}
 			}
 		}
 	}
-	return log
+
+	// Diff annotations
+	if mutated.Annotations != nil {
+		if original.Annotations == nil {
+			patches = append(patches, jsonpatch.JsonPatchOperation{
+				Operation: "add",
+				Path:      "/metadata/annotations",
+				Value:     mutated.Annotations,
+			})
+		} else {
+			for k, v := range mutated.Annotations {
+				if original.Annotations[k] != v {
+					patches = append(patches, jsonpatch.JsonPatchOperation{
+						Operation: "add",
+						Path:      "/metadata/annotations/" + escapeJSONPointer(k),
+						Value:     v,
+					})
+				}
+			}
+		}
+	}
+
+	return patches
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
+// escapeJSONPointer escapes special characters per RFC 6901.
+func escapeJSONPointer(s string) string {
+	s = strings.ReplaceAll(s, "~", "~0")
+	s = strings.ReplaceAll(s, "/", "~1")
+	return s
+}
 
-// +kubebuilder:webhook:path=/mutate-tekton-dev-v1-pipelinerun,mutating=true,failurePolicy=fail,sideEffects=None,groups=tekton.dev,resources=pipelineruns,verbs=create,versions=v1,name=pipelinerun-kueue-defaulter.tekton-kueue.io,admissionReviewVersions=v1
+// SetupPipelineRunWebhookWithManager registers the webhook handler directly
+// on the webhook server, bypassing controller-runtime's CustomDefaulter
+// struct round-trip pattern.
+func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, handler *PipelineRunWebhookHandler) error {
+	srv := mgr.GetWebhookServer()
+	srv.Register("/mutate-tekton-dev-v1-pipelinerun", &admission.Webhook{Handler: handler})
+	return nil
+}
 
-// PipelineRunCustomDefaulter struct is responsible for setting default values on the custom resource of the
-// Kind PipelineRun when those are created or updated.
-//
-// NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
-// as it is used only for temporary operations and does not need to be deeply copied.
+// Legacy types kept for backward compatibility with the mutate CLI subcommand.
+// The CLI still uses CustomDefaulter because it doesn't go through the
+// admission webhook path and doesn't have the zero-value leak problem.
+
 type pipelineRunCustomDefaulter struct {
 	configStore *ConfigStore
 }
 
-func NewCustomDefaulter(configStore *ConfigStore) (webhook.CustomDefaulter, error) {
-	defaulter := &pipelineRunCustomDefaulter{
-		configStore: configStore,
-	}
-	return defaulter, nil
+func NewCustomDefaulter(configStore *ConfigStore) (*pipelineRunCustomDefaulter, error) {
+	return &pipelineRunCustomDefaulter{configStore: configStore}, nil
 }
 
-// Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind PipelineRun.
-func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
-	plr, ok := obj.(*tekv1.PipelineRun)
-
-	if !ok {
-		return k8serrors.NewBadRequest(fmt.Sprintf("expected a PipelineRun object but got %T", obj))
-	}
+func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, plr *tekv1.PipelineRun) error {
 
 	plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
 	if plr.Labels == nil {
@@ -108,21 +210,13 @@ func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		plr.Labels[common.QueueLabel] = config.QueueName
 	}
 	if config.MultiKueueOverride {
-		plr.Spec.ManagedBy = ptr.To(common.ManagedByMultiKueueLabel)
+		managedBy := common.ManagedByMultiKueueLabel
+		plr.Spec.ManagedBy = &managedBy
 	}
 	for _, mutator := range mutators {
 		if err := mutator.Mutate(plr); err != nil {
-			var validationErr *cel.ValidationError
-			if errors.As(err, &validationErr) {
-				return k8serrors.NewBadRequest(validationErr.Error())
-			}
-			var evaluationErr *cel.EvaluationError
-			if errors.As(err, &evaluationErr) {
-				return k8serrors.NewInternalError(evaluationErr)
-			}
 			return err
 		}
 	}
-
 	return nil
 }
