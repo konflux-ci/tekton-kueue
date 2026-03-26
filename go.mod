@@ -5,6 +5,7 @@ go 1.25.3
 require (
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.26.0
+	github.com/konflux-ci/coverport/instrumentation/go v0.0.0-20260323134922-253ce1b67e18
 	github.com/onsi/ginkgo/v2 v2.25.3
 	github.com/onsi/gomega v1.38.2
 	github.com/prometheus/client_golang v1.23.2
