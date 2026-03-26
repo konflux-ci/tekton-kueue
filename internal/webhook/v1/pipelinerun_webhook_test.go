@@ -27,8 +27,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"gomodules.xyz/jsonpatch/v2"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 func TestV1Webhook(t *testing.T) {
@@ -338,6 +342,126 @@ var _ = Describe("PipelineRun Webhook", func() {
 				To(And(
 					Satisfy(errors.IsBadRequest),
 					MatchError(ContainSubstring("expected a PipelineRun object but got *v1.Pipeline"))))
+		})
+	})
+})
+
+var _ = Describe("PipelineRunWebhookHandler", func() {
+	var (
+		handler *PipelineRunWebhookHandler
+	)
+
+	makeRequest := func(plr *tektondevv1.PipelineRun) admission.Request {
+		raw, err := json.Marshal(plr)
+		Expect(err).NotTo(HaveOccurred())
+		return admission.Request{
+			AdmissionRequest: admissionv1.AdmissionRequest{
+				Object: k8sruntime.RawExtension{Raw: raw},
+			},
+		}
+	}
+
+	findPatch := func(patches []jsonpatch.JsonPatchOperation, path string) *jsonpatch.JsonPatchOperation {
+		for _, p := range patches {
+			if p.Path == path {
+				return &p
+			}
+		}
+		return nil
+	}
+
+	Context("Handle", func() {
+		It("should set spec.status and queue label on a minimal PipelineRun", func(ctx context.Context) {
+			cfgStore := &ConfigStore{config: &config.Config{QueueName: "test-queue"}}
+			handler = NewWebhookHandler(cfgStore, admission.NewDecoder(k8sruntime.NewScheme()))
+
+			plr := &tektondevv1.PipelineRun{
+				Spec: tektondevv1.PipelineRunSpec{
+					PipelineRef: &tektondevv1.PipelineRef{Name: "test"},
+				},
+			}
+			resp := handler.Handle(ctx, makeRequest(plr))
+			Expect(resp.Allowed).To(BeTrue())
+			Expect(resp.Patches).NotTo(BeEmpty())
+
+			statusPatch := findPatch(resp.Patches, "/spec/status")
+			Expect(statusPatch).NotTo(BeNil())
+			Expect(statusPatch.Value).To(Equal("PipelineRunPending"))
+
+			labelPatch := findPatch(resp.Patches, "/metadata/labels")
+			Expect(labelPatch).NotTo(BeNil())
+		})
+
+		It("should not add queue label if already present", func(ctx context.Context) {
+			cfgStore := &ConfigStore{config: &config.Config{QueueName: "test-queue"}}
+			handler = NewWebhookHandler(cfgStore, admission.NewDecoder(k8sruntime.NewScheme()))
+
+			plr := &tektondevv1.PipelineRun{
+				Spec: tektondevv1.PipelineRunSpec{
+					PipelineRef: &tektondevv1.PipelineRef{Name: "test"},
+				},
+			}
+			plr.Labels = map[string]string{common.QueueLabel: "existing-queue"}
+			resp := handler.Handle(ctx, makeRequest(plr))
+			Expect(resp.Allowed).To(BeTrue())
+
+			// Should not have a label patch since queue label already exists
+			queuePatch := findPatch(resp.Patches, "/metadata/labels/"+escapeJSONPointer(common.QueueLabel))
+			Expect(queuePatch).To(BeNil())
+		})
+
+		It("should set managedBy when multiKueueOverride is true", func(ctx context.Context) {
+			cfgStore := &ConfigStore{config: &config.Config{QueueName: "test-queue", MultiKueueOverride: true}}
+			handler = NewWebhookHandler(cfgStore, admission.NewDecoder(k8sruntime.NewScheme()))
+
+			plr := &tektondevv1.PipelineRun{
+				Spec: tektondevv1.PipelineRunSpec{
+					PipelineRef: &tektondevv1.PipelineRef{Name: "test"},
+				},
+			}
+			resp := handler.Handle(ctx, makeRequest(plr))
+			Expect(resp.Allowed).To(BeTrue())
+
+			managedByPatch := findPatch(resp.Patches, "/spec/managedBy")
+			Expect(managedByPatch).NotTo(BeNil())
+			Expect(managedByPatch.Value).To(Equal(common.ManagedByMultiKueueLabel))
+		})
+
+		It("should NOT include serviceAccountName in patches", func(ctx context.Context) {
+			cfgStore := &ConfigStore{config: &config.Config{QueueName: "test-queue"}}
+			handler = NewWebhookHandler(cfgStore, admission.NewDecoder(k8sruntime.NewScheme()))
+
+			plr := &tektondevv1.PipelineRun{
+				Spec: tektondevv1.PipelineRunSpec{
+					PipelineRef: &tektondevv1.PipelineRef{Name: "test"},
+				},
+			}
+			resp := handler.Handle(ctx, makeRequest(plr))
+			Expect(resp.Allowed).To(BeTrue())
+
+			// This is the core assertion: no patch should touch serviceAccountName
+			for _, p := range resp.Patches {
+				Expect(p.Path).NotTo(ContainSubstring("serviceAccountName"),
+					"Patch should not contain serviceAccountName — this would prevent Tekton webhook from applying defaults")
+				Expect(p.Path).NotTo(ContainSubstring("taskRunTemplate"),
+					"Patch should not contain taskRunTemplate — this would leak zero-value fields")
+			}
+		})
+
+		It("should not set managedBy when multiKueueOverride is false", func(ctx context.Context) {
+			cfgStore := &ConfigStore{config: &config.Config{QueueName: "test-queue", MultiKueueOverride: false}}
+			handler = NewWebhookHandler(cfgStore, admission.NewDecoder(k8sruntime.NewScheme()))
+
+			plr := &tektondevv1.PipelineRun{
+				Spec: tektondevv1.PipelineRunSpec{
+					PipelineRef: &tektondevv1.PipelineRef{Name: "test"},
+				},
+			}
+			resp := handler.Handle(ctx, makeRequest(plr))
+			Expect(resp.Allowed).To(BeTrue())
+
+			managedByPatch := findPatch(resp.Patches, "/spec/managedBy")
+			Expect(managedByPatch).To(BeNil())
 		})
 	})
 })
