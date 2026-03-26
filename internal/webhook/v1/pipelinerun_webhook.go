@@ -24,10 +24,15 @@ import (
 	"strings"
 
 	"github.com/konflux-ci/tekton-kueue/internal/cel"
+	pkgconfig "github.com/konflux-ci/tekton-kueue/pkg/config"
 	"github.com/konflux-ci/tekton-kueue/pkg/common"
 	tekv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"gomodules.xyz/jsonpatch/v2"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -98,7 +103,6 @@ func (h *PipelineRunWebhookHandler) Handle(ctx context.Context, req admission.Re
 	//    resource annotations — all metadata, no spec fields. We apply them
 	//    to the decoded struct then diff only the metadata to build patches.
 	if len(mutators) > 0 {
-		// Deep copy so CEL mutations don't affect our original
 		plrForCEL := plr.DeepCopy()
 		for _, mutator := range mutators {
 			if err := mutator.Mutate(plrForCEL); err != nil {
@@ -126,7 +130,7 @@ func (h *PipelineRunWebhookHandler) Handle(ctx context.Context, req admission.Re
 func metadataDiffPatches(original, mutated *tekv1.PipelineRun) []jsonpatch.JsonPatchOperation {
 	var patches []jsonpatch.JsonPatchOperation
 
-	// Diff labels
+	// Diff labels: additions and modifications
 	if mutated.Labels != nil {
 		if original.Labels == nil {
 			patches = append(patches, jsonpatch.JsonPatchOperation{
@@ -144,10 +148,19 @@ func metadataDiffPatches(original, mutated *tekv1.PipelineRun) []jsonpatch.JsonP
 					})
 				}
 			}
+			// Detect deletions
+			for k := range original.Labels {
+				if _, exists := mutated.Labels[k]; !exists {
+					patches = append(patches, jsonpatch.JsonPatchOperation{
+						Operation: "remove",
+						Path:      "/metadata/labels/" + escapeJSONPointer(k),
+					})
+				}
+			}
 		}
 	}
 
-	// Diff annotations
+	// Diff annotations: additions and modifications
 	if mutated.Annotations != nil {
 		if original.Annotations == nil {
 			patches = append(patches, jsonpatch.JsonPatchOperation{
@@ -162,6 +175,15 @@ func metadataDiffPatches(original, mutated *tekv1.PipelineRun) []jsonpatch.JsonP
 						Operation: "add",
 						Path:      "/metadata/annotations/" + escapeJSONPointer(k),
 						Value:     v,
+					})
+				}
+			}
+			// Detect deletions
+			for k := range original.Annotations {
+				if _, exists := mutated.Annotations[k]; !exists {
+					patches = append(patches, jsonpatch.JsonPatchOperation{
+						Operation: "remove",
+						Path:      "/metadata/annotations/" + escapeJSONPointer(k),
 					})
 				}
 			}
@@ -187,36 +209,57 @@ func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, handler *PipelineRunWe
 	return nil
 }
 
-// Legacy types kept for backward compatibility with the mutate CLI subcommand.
-// The CLI still uses CustomDefaulter because it doesn't go through the
-// admission webhook path and doesn't have the zero-value leak problem.
-
-type pipelineRunCustomDefaulter struct {
-	configStore *ConfigStore
-}
-
-func NewCustomDefaulter(configStore *ConfigStore) (*pipelineRunCustomDefaulter, error) {
-	return &pipelineRunCustomDefaulter{configStore: configStore}, nil
-}
-
-func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, plr *tekv1.PipelineRun) error {
-
+// ApplyMutations applies all kueue mutations to a PipelineRun in-place.
+// Used by both the legacy CustomDefaulter (for the mutate CLI) and can be
+// used for testing. This is the single source of truth for mutation logic.
+func ApplyMutations(plr *tekv1.PipelineRun, cfg *pkgconfig.Config, mutators []PipelineRunMutator) error {
 	plr.Spec.Status = tekv1.PipelineRunSpecStatusPending
 	if plr.Labels == nil {
 		plr.Labels = make(map[string]string)
 	}
-	config, mutators := d.configStore.GetConfigAndMutators()
 	if _, exists := plr.Labels[common.QueueLabel]; !exists {
-		plr.Labels[common.QueueLabel] = config.QueueName
+		plr.Labels[common.QueueLabel] = cfg.QueueName
 	}
-	if config.MultiKueueOverride {
-		managedBy := common.ManagedByMultiKueueLabel
-		plr.Spec.ManagedBy = &managedBy
+	if cfg.MultiKueueOverride {
+		plr.Spec.ManagedBy = ptr.To(common.ManagedByMultiKueueLabel)
 	}
 	for _, mutator := range mutators {
 		if err := mutator.Mutate(plr); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// pipelineRunCustomDefaulter implements webhook.CustomDefaulter for backward
+// compatibility with the mutate CLI subcommand. The CLI operates on local
+// files (no admission webhook path), so the zero-value leak doesn't apply.
+type pipelineRunCustomDefaulter struct {
+	configStore *ConfigStore
+}
+
+func NewCustomDefaulter(configStore *ConfigStore) (webhook.CustomDefaulter, error) {
+	return &pipelineRunCustomDefaulter{configStore: configStore}, nil
+}
+
+// Default implements webhook.CustomDefaulter.
+func (d *pipelineRunCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
+	plr, ok := obj.(*tekv1.PipelineRun)
+	if !ok {
+		return k8serrors.NewBadRequest(fmt.Sprintf("expected a PipelineRun object but got %T", obj))
+	}
+
+	cfg, mutators := d.configStore.GetConfigAndMutators()
+	if err := ApplyMutations(plr, cfg, mutators); err != nil {
+		var validationErr *cel.ValidationError
+		if errors.As(err, &validationErr) {
+			return k8serrors.NewBadRequest(validationErr.Error())
+		}
+		var evaluationErr *cel.EvaluationError
+		if errors.As(err, &evaluationErr) {
+			return k8serrors.NewInternalError(evaluationErr)
+		}
+		return err
 	}
 	return nil
 }
