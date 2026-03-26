@@ -32,10 +32,16 @@ COPY LICENSE /licenses/
 USER 65532:65532
 
 # It is mandatory to set these labels
-LABEL name="Tekton Kueue Extension"
-LABEL description="Tekton Kueue Extension"
-LABEL com.redhat.component="Tekton Kueue Extension"
-LABEL io.k8s.description="Tekton Kueue Extension"
-LABEL io.k8s.display-name="Tekton Kueue Extension"
+LABEL \
+    com.redhat.component="openshift-kueue-rhel9-container" \
+    cpe="cpe:/a:redhat:openshift_pipelines:0.3::el9" \
+    description="Red Hat OpenShift Pipelines tekton-kueue kueue" \
+    io.k8s.description="Red Hat OpenShift Pipelines tekton-kueue kueue" \
+    io.k8s.display-name="Red Hat OpenShift Pipelines tekton-kueue kueue" \
+    io.openshift.tags="tekton,openshift,tekton-kueue,kueue" \
+    maintainer="pipelines-extcomm@redhat.com" \
+    name="openshift-pipelines/kueue-rhel9" \
+    summary="Red Hat OpenShift Pipelines tekton-kueue kueue" \
+    version="v0.3.1"
 
 ENTRYPOINT ["/manager"]
