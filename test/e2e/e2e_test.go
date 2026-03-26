@@ -694,6 +694,39 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(k8sClient.Create(ctx, plr)).Should(MatchError(kerrors.IsInvalid, "Invalid"))
 		})
 	})
+
+	Context("Webhook does not leak zero-value spec fields", Ordered, Label("smoke"), func() {
+		// Regression test for https://github.com/konflux-ci/tekton-kueue/issues/319
+		// The webhook must NOT include serviceAccountName or taskRunTemplate in
+		// its patches, so that downstream Tekton webhook can apply config-defaults.
+		It("should not set serviceAccountName on created PipelineRun", func(ctx context.Context) {
+			plr := plrTemplate.DeepCopy()
+			Eventually(
+				func() error {
+					return k8sClient.Create(ctx, plr)
+				},
+				90*time.Second,
+				3*time.Second,
+			).Should(Succeed())
+
+			// Re-fetch to get the object as stored by the API server
+			fetched := &tekv1.PipelineRun{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, client.ObjectKeyFromObject(plr), fetched)
+			}, 30*time.Second, time.Second).Should(Succeed())
+
+			// The webhook should have set status=Pending and queue label
+			Expect(fetched.Spec.Status).To(Equal(tekv1.PipelineRunSpecStatusPending))
+			Expect(fetched.Labels[common.QueueLabel]).NotTo(BeEmpty())
+
+			// The webhook must NOT have set serviceAccountName to "default".
+			// If empty, Tekton's webhook will apply the configured default (e.g., "pipeline").
+			// If "default", the zero-value leak bug is present.
+			sa := fetched.Spec.TaskRunTemplate.ServiceAccountName
+			Expect(sa).NotTo(Equal("default"),
+				"serviceAccountName should not be 'default' — this indicates the webhook is leaking zero-value fields")
+		})
+	})
 })
 
 func EnsureMatchingWorkloadExistWithStatusCondition(

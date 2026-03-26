@@ -31,6 +31,7 @@ import (
 
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	admissionv1 "k8s.io/api/admission/v1"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -120,10 +121,9 @@ var _ = BeforeSuite(func() {
 	err = cfgStore.Update([]byte(rawConfig))
 	Expect(err).NotTo(HaveOccurred())
 
-	defaulter, err := v1.NewCustomDefaulter(cfgStore)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = v1.SetupPipelineRunWebhookWithManager(mgr, defaulter)
+	decoder := admission.NewDecoder(mgr.GetScheme())
+	handler := v1.NewWebhookHandler(cfgStore, decoder)
+	err = v1.SetupPipelineRunWebhookWithManager(mgr, handler)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:webhook
