@@ -7,6 +7,10 @@ jobs:
   test-e2e:
     name: Run on Ubuntu
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      IMG: konflux-ci.dev/tekton-kueue:v0.0.1
     steps:
       - name: Clone the code
         uses: actions/checkout@v4
@@ -28,16 +32,57 @@ jobs:
       - name: Create kind cluster
         run: kind create cluster
         env:
-          KIND_EXPERIMENTAL_PROVIDER: podman        
+          KIND_EXPERIMENTAL_PROVIDER: podman
 
-      - name: Running Test e2e
+      - name: Build and load instrumented image
         env:
           KIND_EXPERIMENTAL_PROVIDER: podman
-          IMG: konflux-ci.dev/tekton-kueue:v0.0.1
+          ENABLE_COVERAGE: "true"
         run: |
           go mod tidy
           make load-image "IMG=$IMG"
           podman exec kind-control-plane crictl images
+
+      - name: Install Kueue and Tekton
+        run: |
           make kueue
           make tekton
-          make test-e2e
+
+      - name: Run e2e tests
+        env:
+          KIND_EXPERIMENTAL_PROVIDER: podman
+          SKIP_CLEANUP: "true"
+        run: make test-e2e
+
+      - name: Collect e2e coverage
+        if: always()
+        run: |
+          mkdir -p coverage-output && chmod 777 coverage-output
+          cp $HOME/.kube/config /tmp/kubeconfig && chmod 644 /tmp/kubeconfig
+          podman run --rm \
+            --network host \
+            -v /tmp/kubeconfig:/kubeconfig:ro \
+            -v $PWD/coverage-output:/workspace/coverage-output \
+            -e KUBECONFIG=/kubeconfig \
+            quay.io/konflux-ci/konflux-devprod/coverport-cli \
+            collect \
+              --namespace=tekton-kueue \
+              --label-selector=control-plane=controller-manager \
+              --test-name=e2e-tests \
+              --output=/workspace/coverage-output || true
+
+      - name: Upload e2e coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          flags: e2e-tests
+          directory: coverage-output
+          fail_ci_if_error: false
+
+      - name: Cleanup
+        if: always()
+        run: |
+          make undeploy || true
+          make uninstall || true
+          kubectl delete ns tekton-kueue || true
