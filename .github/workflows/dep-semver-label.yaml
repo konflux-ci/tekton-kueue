@@ -1,0 +1,77 @@
+name: Dependency Semver Labels (fallback)
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  semver-label:
+    name: Ensure semver labels on dependency PRs
+    if: >-
+      github.event.pull_request.user.login == 'renovate[bot]' ||
+      github.event.pull_request.user.login == 'red-hat-konflux[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Check for existing semver labels
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LABELS=$(gh pr view "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --json labels --jq '.labels[].name' || true)
+
+          if echo "${LABELS}" | grep -q "^semver/"; then
+            echo "Semver label already present, skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No semver label found, will detect and apply"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout code
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/checkout@v4
+
+      - name: Detect and apply semver label
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          echo "${PR_BODY}" > /tmp/pr-body.md
+
+          BUMP_TYPE=$(./hack/detect-semver-bump.sh /tmp/pr-body.md "${{ github.event.pull_request.title }}")
+          echo "Detected bump type: ${BUMP_TYPE}"
+
+          # Map digest to patch for labeling purposes
+          LABEL_TYPE="${BUMP_TYPE}"
+          if [[ "${LABEL_TYPE}" == "digest" ]]; then
+            LABEL_TYPE="patch"
+          fi
+
+          if [[ "${LABEL_TYPE}" == "unknown" ]]; then
+            echo "Could not determine semver bump type, skipping label"
+            exit 0
+          fi
+
+          # Create the label if it doesn't exist
+          case "${LABEL_TYPE}" in
+            patch) COLOR="0e8a16" ;;  # green
+            minor) COLOR="fbca04" ;;  # yellow
+            major) COLOR="e11d48" ;;  # red
+          esac
+
+          gh label create "semver/${LABEL_TYPE}" --repo "${{ github.repository }}" \
+            --color "${COLOR}" --description "Semver ${LABEL_TYPE} version bump" \
+            --force 2>/dev/null || true
+
+          gh pr edit "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --add-label "semver/${LABEL_TYPE}"
+
+          echo "Applied label: semver/${LABEL_TYPE}"
