@@ -16,7 +16,9 @@
     "konflux",
     "mintmaker"
   ],
-  "ignorePaths": ["upstream/**"],
+  "ignorePaths": [
+    "upstream/**"
+  ],
   "autoApprove": true,
   "gomod": {
     "postUpdateOptions": [
@@ -27,82 +29,148 @@
     {
       "description": "Group and auto-merge go module patch bumps together",
       "groupName": "go-modules patch",
-      "matchManagers": ["gomod"],
-      "matchUpdateTypes": ["patch", "digest"],
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "patch",
+        "digest"
+      ],
       "automerge": true,
-      "addLabels": ["auto-merged"]
+      "addLabels": [
+        "auto-merged"
+      ]
     },
     {
       "description": "Group go module minor bumps together",
       "groupName": "go-modules minor",
-      "matchManagers": ["gomod"],
-      "matchUpdateTypes": ["minor"]
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "minor"
+      ]
     },
     {
       "description": "Individual PRs for go module major bumps (no groupName = one PR per package)",
-      "matchManagers": ["gomod"],
-      "matchUpdateTypes": ["major"]
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ]
     },
     {
       "description": "Group Kubernetes and controller-runtime updates together",
       "groupName": "go-modules k8s",
-      "matchManagers": ["gomod"],
-      "matchPackagePatterns": ["^k8s\\.io/"],
-      "matchPackageNames": ["sigs.k8s.io/controller-runtime"],
-      "matchUpdateTypes": ["minor", "major", "digest"]
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchPackageNames": [
+        "sigs.k8s.io/controller-runtime",
+        "/^k8s\\.io//"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "major",
+        "digest"
+      ]
     },
     {
       "description": "Label patch version bumps",
-      "matchUpdateTypes": ["patch", "digest"],
-      "addLabels": ["semver/patch"]
+      "matchUpdateTypes": [
+        "patch",
+        "digest"
+      ],
+      "addLabels": [
+        "semver/patch"
+      ]
     },
     {
       "description": "Label minor version bumps",
-      "matchUpdateTypes": ["minor"],
-      "addLabels": ["semver/minor"]
+      "matchUpdateTypes": [
+        "minor"
+      ],
+      "addLabels": [
+        "semver/minor"
+      ]
     },
     {
       "description": "Label major version bumps",
-      "matchUpdateTypes": ["major"],
-      "addLabels": ["semver/major"]
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "addLabels": [
+        "semver/major"
+      ]
     },
     {
       "description": "Label direct dependencies",
-      "matchManagers": ["gomod"],
-      "matchDepTypes": ["dependencies"],
-      "addLabels": ["dependency/direct"]
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "dependencies"
+      ],
+      "addLabels": [
+        "dependency/direct"
+      ]
     },
     {
       "description": "Label transitive (indirect) dependencies",
-      "matchManagers": ["gomod"],
-      "matchDepTypes": ["indirect"],
-      "addLabels": ["dependency/transitive"]
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "indirect"
+      ],
+      "addLabels": [
+        "dependency/transitive"
+      ]
     },
     {
       "description": "Prioritize Konflux tekton task reference updates",
-      "matchManagers": ["tekton"],
+      "matchManagers": [
+        "tekton"
+      ],
       "prPriority": 10,
       "automerge": true,
-      "addLabels": ["auto-merged"]
+      "addLabels": [
+        "auto-merged"
+      ]
     },
     {
       "description": "Auto-merge dockerfile updates (except Go toolchain)",
-      "matchManagers": ["dockerfile"],
-      "excludePackagePatterns": ["go-toolset"],
+      "matchManagers": [
+        "dockerfile"
+      ],
       "automerge": true,
-      "addLabels": ["auto-merged"]
+      "addLabels": [
+        "auto-merged"
+      ],
+      "matchPackageNames": [
+        "!/go-toolset/"
+      ]
     },
     {
       "description": "Go toolchain updates require manual review",
-      "matchManagers": ["dockerfile"],
-      "matchPackagePatterns": ["go-toolset"],
-      "automerge": false
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "automerge": false,
+      "matchPackageNames": [
+        "/go-toolset/"
+      ]
     },
     {
       "description": "Auto-merge rpm-lockfile updates",
-      "matchManagers": ["rpm-lockfile"],
+      "matchManagers": [
+        "rpm-lockfile"
+      ],
       "automerge": true,
-      "addLabels": ["auto-merged"]
+      "addLabels": [
+        "auto-merged"
+      ]
     }
   ]
 }
