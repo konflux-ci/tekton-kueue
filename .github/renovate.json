@@ -11,13 +11,10 @@
     "github-actions"
   ],
   "addLabels": [
-    "approved",
-    "lgtm",
     "konflux",
     "mintmaker"
   ],
   "ignorePaths": ["upstream/**"],
-  "autoApprove": true,
   "gomod": {
     "postUpdateOptions": [
       "gomodTidy"
@@ -30,11 +27,10 @@
       "matchManagers": ["gomod"],
       "matchUpdateTypes": ["patch", "digest"],
       "automerge": true,
-      "addLabels": ["auto-merged"]
+      "addLabels": ["approved", "lgtm", "auto-merged"]
     },
     {
-      "description": "Group go module minor bumps together",
-      "groupName": "go-modules minor",
+      "description": "Individual PRs for go module minor bumps",
       "matchManagers": ["gomod"],
       "matchUpdateTypes": ["minor"]
     },
@@ -83,14 +79,14 @@
       "matchManagers": ["tekton"],
       "prPriority": 10,
       "automerge": true,
-      "addLabels": ["auto-merged"]
+      "addLabels": ["approved", "lgtm", "auto-merged"]
     },
     {
       "description": "Auto-merge dockerfile updates (except Go toolchain)",
       "matchManagers": ["dockerfile"],
       "excludePackagePatterns": ["go-toolset"],
       "automerge": true,
-      "addLabels": ["auto-merged"]
+      "addLabels": ["approved", "lgtm", "auto-merged"]
     },
     {
       "description": "Go toolchain updates require manual review",
@@ -102,7 +98,7 @@
       "description": "Auto-merge rpm-lockfile updates",
       "matchManagers": ["rpm-lockfile"],
       "automerge": true,
-      "addLabels": ["auto-merged"]
+      "addLabels": ["approved", "lgtm", "auto-merged"]
     }
   ]
 }
