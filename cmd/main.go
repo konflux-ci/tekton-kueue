@@ -45,6 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/konflux-ci/tekton-kueue/internal/controller"
 	webhookv1 "github.com/konflux-ci/tekton-kueue/internal/webhook/v1"
@@ -288,14 +289,11 @@ func runWebhook(args []string) {
 		os.Exit(1)
 	}
 	cfgStore := &webhookv1.ConfigStore{}
-	customDefaulter, err := webhookv1.NewCustomDefaulter(cfgStore)
-	if err != nil {
-		setupLog.Error(err, "unable to create custom defaulter")
-		os.Exit(1)
-	}
+	decoder := admission.NewDecoder(scheme)
+	handler := webhookv1.NewWebhookHandler(cfgStore, decoder)
 	err = webhookv1.SetupPipelineRunWebhookWithManager(
 		mgr,
-		customDefaulter,
+		handler,
 	)
 	if err != nil {
 		setupLog.Error(err, "Failed to setup the webhook")
