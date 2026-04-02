@@ -3,6 +3,8 @@
   "extends": [
     "github>konflux-ci/mintmaker//config/renovate/renovate.json"
   ],
+  "schedule": ["before 7am on Monday"],
+  "minimumReleaseAge": "3 days",
   "enabledManagers": [
     "tekton",
     "dockerfile",
