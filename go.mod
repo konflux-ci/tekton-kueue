@@ -43,8 +43,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
-	github.com/go-kit/log v0.2.1 // indirect
-	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.22.3 // indirect
@@ -83,7 +81,7 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
-	github.com/prometheus/statsd_exporter v0.22.7 // indirect
+	github.com/prometheus/statsd_exporter v0.29.0 // indirect
 	github.com/ray-project/kuberay/ray-operator v1.5.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
@@ -122,7 +120,6 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/apiextensions-apiserver v0.35.0 // indirect
 	k8s.io/apiserver v0.35.0 // indirect
 	k8s.io/component-base v0.35.0 // indirect
