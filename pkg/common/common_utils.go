@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-const namespaceFile = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+var namespaceFile = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 
 func GetCurrentNamespace() (string, error) {
 	bytes, err := os.ReadFile(namespaceFile)
