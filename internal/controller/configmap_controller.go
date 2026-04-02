@@ -14,6 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+// ConfigMapReconciler watches the tekton-kueue-config ConfigMap and propagates
+// configuration changes to the webhook's ConfigStore. This allows queue names,
+// multiKueue settings, and CEL mutation expressions to be updated at runtime
+// without restarting the webhook pod.
 type ConfigMapReconciler struct {
 	Client client.Client
 	Store  *v1.ConfigStore
