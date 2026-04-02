@@ -1,3 +1,14 @@
+// Package controller implements the Kueue integration for Tekton PipelineRuns.
+//
+// It bridges Tekton and Kueue by wrapping PipelineRun as a Kueue GenericJob,
+// allowing Kueue to manage PipelineRun scheduling, quota, and preemption.
+// PipelineRuns are suspended (set to Pending) by the webhook on creation and
+// only released by Kueue when cluster resources are available.
+//
+// Resource requirements for quota accounting are declared via annotations
+// on the PipelineRun (e.g. kueue.konflux-ci.dev/requests-cpu). A synthetic
+// "tekton.dev/pipelineruns" resource is always included to enable concurrency
+// limits independent of actual compute resources.
 package controller
 
 import (
@@ -36,6 +47,9 @@ import (
 // +kubebuilder:rbac:groups="tekton.dev",resources=pipelineruns/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=list;watch
 
+// PipelineRun wraps tekv1.PipelineRun to implement Kueue's GenericJob and
+// JobWithCustomStop interfaces. This is a type definition (not an alias) so
+// we can attach methods without modifying the upstream Tekton type.
 type PipelineRun tekv1.PipelineRun
 
 const (
@@ -43,7 +57,12 @@ const (
 )
 
 const (
-	ControllerName           = "KueuePipelineRunController"
+	ControllerName = "KueuePipelineRunController"
+
+	// ResourcePipelineRunCount is a synthetic resource name used in Kueue
+	// workloads to track the number of concurrent PipelineRuns. Every
+	// PipelineRun requests exactly 1 unit of this resource, enabling
+	// ClusterQueue quotas to limit concurrency (e.g. "max 10 PipelineRuns").
 	ResourcePipelineRunCount = "tekton.dev/pipelineruns"
 )
 
@@ -59,6 +78,10 @@ var (
 	PLRLog                                = ctrl.Log.WithName(ControllerName)
 )
 
+// SetupWithManager registers the PipelineRun reconciler with the manager using
+// Kueue's generic reconciler factory. The factory handles Workload lifecycle
+// (create, admit, suspend, evict) so this controller only needs to implement
+// the GenericJob interface methods that map PipelineRun semantics to Kueue.
 func SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	reconcilerFactory := jobframework.NewGenericReconcilerFactory(
 		func() jobframework.GenericJob { return &PipelineRun{} },
@@ -81,11 +104,16 @@ func SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	return reconciler.SetupWithManager(mgr)
 }
 
+// SetupIndexer creates the field index that Kueue uses to look up Workloads
+// by their owner PipelineRun. This must be called before the reconciler starts.
 func SetupIndexer(ctx context.Context, fieldIndexer client.FieldIndexer) error {
 	return jobframework.SetupWorkloadOwnerIndex(ctx, fieldIndexer, tekv1.SchemeGroupVersion.WithKind("PipelineRun"))
 }
 
 // Stop implements jobframework.JobWithCustomStop.
+// It gracefully stops a PipelineRun by setting its status to StoppedRunFinally,
+// which tells Tekton to finish currently running tasks but not start new ones.
+// Returns false if the PipelineRun is already done or in a terminal state.
 func (p *PipelineRun) Stop(ctx context.Context, c client.Client, _ []podset.PodSetInfo, stopReason jobframework.StopReason, eventMsg string) (bool, error) {
 	plr := (*tekv1.PipelineRun)(p)
 	plrPendingOrRunning := (plr.Spec.Status == "") || (plr.Spec.Status == tekv1.PipelineRunSpecStatusPending)
@@ -96,7 +124,6 @@ func (p *PipelineRun) Stop(ctx context.Context, c client.Client, _ []podset.PodS
 
 	plrCopy := plr.DeepCopy()
 	plrCopy.SetManagedFields(nil)
-	// should we wait for the pipeline to stop?
 	plrCopy.Spec.Status = tekv1.PipelineRunSpecStatusStoppedRunFinally
 	err := c.Patch(ctx, plrCopy, client.Apply, client.FieldOwner(ControllerName), client.ForceOwnership)
 	if err != nil {
@@ -144,6 +171,11 @@ func (p *PipelineRun) Object() client.Object {
 }
 
 // PodSets implements jobframework.GenericJob.
+// Returns a single synthetic PodSet representing the PipelineRun's resource
+// needs. Unlike batch Jobs, PipelineRuns don't declare their pods upfront,
+// so we use a dummy container whose resource requests are derived from
+// annotations on the PipelineRun. This allows Kueue to account for resources
+// without needing to know the actual task pod specifications.
 func (p *PipelineRun) PodSets() ([]kueue.PodSet, error) {
 	requests, err := p.resourcesRequests()
 	if err != nil {
@@ -227,6 +259,9 @@ func (p *PipelineRun) parseResourcesRequestsAnnotation(k, v string) (*corev1.Res
 }
 
 // PodsReady implements jobframework.GenericJob.
+// This method is never called because the WaitForPodsReady configuration is
+// not enabled for PipelineRuns. Kueue tracks pod readiness for batch Jobs,
+// but PipelineRuns manage their own pod lifecycle through Tekton.
 func (p *PipelineRun) PodsReady() bool {
 	panic("pods ready shouldn't be called")
 }
