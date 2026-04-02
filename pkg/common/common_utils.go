@@ -1,17 +1,21 @@
 package common
 
 import (
-	"errors"
+	"fmt"
 	"os"
+	"strings"
 )
 
 const namespaceFile = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 
 func GetCurrentNamespace() (string, error) {
-	bytes, err := os.ReadFile(namespaceFile)
+	return readNamespace(namespaceFile)
+}
+
+func readNamespace(path string) (string, error) {
+	bytes, err := os.ReadFile(path)
 	if err != nil {
-		return "", errors.New("not able to read  namespace file: " + namespaceFile)
+		return "", fmt.Errorf("not able to read namespace file %s: %w", path, err)
 	}
-	namespace := string(bytes)
-	return namespace, nil
+	return strings.TrimSpace(string(bytes)), nil
 }
