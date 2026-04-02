@@ -21,10 +21,6 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
-// incompatibility between the k8s.io/apiserver package and the github.com/google/cel-go library, specifically related to the TwoVarComprehensions function's signature.
-
-replace github.com/google/cel-go => github.com/google/cel-go v0.22.0
-
 require (
 	cel.dev/expr v0.25.1 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
@@ -73,7 +69,6 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cobra v1.10.1 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/stoewer/go-strcase v1.3.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.64.0 // indirect
