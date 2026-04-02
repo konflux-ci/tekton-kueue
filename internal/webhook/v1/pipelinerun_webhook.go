@@ -71,15 +71,15 @@ func logConstructor(base logr.Logger, req *admission.Request) logr.Logger {
 	return log
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
 // +kubebuilder:webhook:path=/mutate-tekton-dev-v1-pipelinerun,mutating=true,failurePolicy=fail,sideEffects=None,groups=tekton.dev,resources=pipelineruns,verbs=create,versions=v1,name=pipelinerun-kueue-defaulter.tekton-kueue.io,admissionReviewVersions=v1
 
-// PipelineRunCustomDefaulter struct is responsible for setting default values on the custom resource of the
-// Kind PipelineRun when those are created or updated.
+// pipelineRunCustomDefaulter is the webhook handler that intercepts PipelineRun
+// creation requests. It suspends each PipelineRun (Pending), assigns it to a
+// Kueue queue, and applies any configured CEL mutations before the PipelineRun
+// is persisted. The webhook uses failurePolicy=fail to prevent unqueued
+// PipelineRuns from bypassing Kueue.
 //
-// NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
-// as it is used only for temporary operations and does not need to be deeply copied.
+// +kubebuilder:object:generate=false
 type pipelineRunCustomDefaulter struct {
 	configStore *ConfigStore
 }
