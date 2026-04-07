@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/konflux-ci/tekton-kueue/internal/cel"
@@ -36,11 +37,64 @@ import (
 )
 
 // SetupPipelineRunWebhookWithManager registers the webhook for PipelineRun in the manager.
+// It wraps the standard CustomDefaulter handler with a patch filter to prevent
+// controller-runtime's struct round-tripping from leaking zero-value fields
+// (e.g. taskRunTemplate: {}) into the admission response. Such leaks block
+// downstream webhooks (Tekton's) from applying their own defaults.
+// See https://github.com/konflux-ci/tekton-kueue/issues/319
 func SetupPipelineRunWebhookWithManager(mgr ctrl.Manager, defaulter admission.CustomDefaulter) error {
-	return ctrl.NewWebhookManagedBy(mgr).For(&tekv1.PipelineRun{}).
-		WithDefaulter(defaulter).
-		WithLogConstructor(logConstructor).
-		Complete()
+	inner := admission.WithCustomDefaulter(mgr.GetScheme(), &tekv1.PipelineRun{}, defaulter)
+	handler := &patchFilteringWebhook{inner: inner}
+	mgr.GetWebhookServer().Register(
+		"/mutate-tekton-dev-v1-pipelinerun",
+		&admission.Webhook{Handler: handler, LogConstructor: logConstructor},
+	)
+	return nil
+}
+
+// allowedPatchPrefixes lists the JSON Pointer prefixes for fields that the
+// webhook intentionally modifies. Any patch outside this allowlist is a
+// side-effect of Go struct round-tripping and gets dropped.
+var allowedPatchPrefixes = []string{
+	"/metadata/labels",
+	"/metadata/annotations",
+	"/spec/status",
+	"/spec/managedBy",
+}
+
+// patchFilteringWebhook wraps an admission.Handler and strips JSON patches
+// that target fields the webhook never intends to modify.
+type patchFilteringWebhook struct {
+	inner admission.Handler
+}
+
+func (w *patchFilteringWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
+	resp := w.inner.Handle(ctx, req)
+	if len(resp.Patches) == 0 {
+		return resp
+	}
+
+	n := 0
+	for _, p := range resp.Patches {
+		if isPatchAllowed(p.Path) {
+			resp.Patches[n] = p
+			n++
+		}
+	}
+	resp.Patches = resp.Patches[:n]
+	if n == 0 {
+		resp.PatchType = nil
+	}
+	return resp
+}
+
+func isPatchAllowed(path string) bool {
+	for _, prefix := range allowedPatchPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func logConstructor(base logr.Logger, req *admission.Request) logr.Logger {
@@ -70,8 +124,6 @@ func logConstructor(base logr.Logger, req *admission.Request) logr.Logger {
 	}
 	return log
 }
-
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
 // +kubebuilder:webhook:path=/mutate-tekton-dev-v1-pipelinerun,mutating=true,failurePolicy=fail,sideEffects=None,groups=tekton.dev,resources=pipelineruns,verbs=create,versions=v1,name=pipelinerun-kueue-defaulter.tekton-kueue.io,admissionReviewVersions=v1
 
