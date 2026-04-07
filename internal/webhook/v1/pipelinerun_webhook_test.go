@@ -19,6 +19,8 @@ package v1
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/konflux-ci/tekton-kueue/internal/cel"
@@ -27,8 +29,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 func TestV1Webhook(t *testing.T) {
@@ -339,5 +344,100 @@ var _ = Describe("PipelineRun Webhook", func() {
 					Satisfy(errors.IsBadRequest),
 					MatchError(ContainSubstring("expected a PipelineRun object but got *v1.Pipeline"))))
 		})
+	})
+})
+
+// minimalPipelineRunJSON is a raw admission request as it would arrive from
+// kubectl — no taskRunTemplate, no serviceAccountName, no status sub-resource.
+var minimalPipelineRunJSON = []byte(`{
+	"apiVersion": "tekton.dev/v1",
+	"kind": "PipelineRun",
+	"metadata": {
+		"name": "test-plr",
+		"namespace": "default"
+	},
+	"spec": {
+		"pipelineRef": {"name": "test-pipeline"}
+	}
+}`)
+
+// fieldsWeNeverTouch lists spec/status fields the webhook should never patch.
+var fieldsWeNeverTouch = []string{
+	"taskRunTemplate",
+	"serviceAccountName",
+	"taskRunSpecs",
+	"workspaces",
+	"timeouts",
+}
+
+func makeAdmissionRequest(raw []byte) admission.Request {
+	return admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Object:    k8sruntime.RawExtension{Raw: raw},
+			Operation: admissionv1.Create,
+		},
+	}
+}
+
+var _ = Describe("Zero-value field leak (issue #319)", func() {
+	var (
+		cfgStore *ConfigStore
+		scheme   *k8sruntime.Scheme
+	)
+
+	BeforeEach(func() {
+		cfgStore = &ConfigStore{config: &config.Config{QueueName: "test-queue"}}
+		scheme = k8sruntime.NewScheme()
+		Expect(tektondevv1.AddToScheme(scheme)).To(Succeed())
+	})
+
+	It("raw CustomDefaulter leaks zero-value struct fields into patches", func(ctx context.Context) {
+		defaulter, err := NewCustomDefaulter(cfgStore)
+		Expect(err).NotTo(HaveOccurred())
+
+		unfiltered := admission.WithCustomDefaulter(scheme, &tektondevv1.PipelineRun{}, defaulter)
+		resp := unfiltered.Handle(ctx, makeAdmissionRequest(minimalPipelineRunJSON))
+		Expect(resp.Allowed).To(BeTrue())
+
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n=== Unfiltered patches (%d) ===\n", len(resp.Patches))
+		for i, p := range resp.Patches {
+			_, _ = fmt.Fprintf(GinkgoWriter, "  [%d] op=%-7s path=%s\n", i, p.Operation, p.Path)
+		}
+
+		leaked := false
+		for _, p := range resp.Patches {
+			for _, field := range fieldsWeNeverTouch {
+				if strings.Contains(p.Path, field) {
+					leaked = true
+				}
+			}
+		}
+		Expect(leaked).To(BeTrue(),
+			"expected the raw CustomDefaulter to leak zero-value fields — "+
+				"if this passes, Go's json.Marshal omitempty behavior may have changed")
+	})
+
+	It("patchFilteringWebhook strips the leaked fields", func(ctx context.Context) {
+		defaulter, err := NewCustomDefaulter(cfgStore)
+		Expect(err).NotTo(HaveOccurred())
+
+		inner := admission.WithCustomDefaulter(scheme, &tektondevv1.PipelineRun{}, defaulter)
+		filtered := &patchFilteringWebhook{inner: inner}
+
+		resp := filtered.Handle(ctx, makeAdmissionRequest(minimalPipelineRunJSON))
+		Expect(resp.Allowed).To(BeTrue())
+		Expect(resp.Patches).NotTo(BeEmpty())
+
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n=== Filtered patches (%d) ===\n", len(resp.Patches))
+		for i, p := range resp.Patches {
+			_, _ = fmt.Fprintf(GinkgoWriter, "  [%d] op=%-7s path=%s\n", i, p.Operation, p.Path)
+		}
+
+		for _, p := range resp.Patches {
+			for _, field := range fieldsWeNeverTouch {
+				Expect(p.Path).NotTo(ContainSubstring(field),
+					fmt.Sprintf("patch at %s still contains '%s' after filtering", p.Path, field))
+			}
+		}
 	})
 })
