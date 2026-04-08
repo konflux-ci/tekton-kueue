@@ -48,10 +48,22 @@ jobs:
           BUMP_TYPE=$(./hack/detect-semver-bump.sh /tmp/pr-body.md "${{ github.event.pull_request.title }}")
           echo "Detected bump type: ${BUMP_TYPE}"
 
-          # Map digest to patch for labeling purposes
+          # Map digest: gomod digests (pseudo-versions) have no semver guarantees,
+          # so treat them as minor to trigger impact analysis. Non-gomod digests
+          # (e.g. container images) are safe to treat as patch.
           LABEL_TYPE="${BUMP_TYPE}"
           if [[ "${LABEL_TYPE}" == "digest" ]]; then
-            LABEL_TYPE="patch"
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            # Detect Go module digests by matching known Go module hosting domains.
+            # This avoids false positives on container image references like
+            # registry.access.redhat.com/ubi9 which also match generic domain/path patterns.
+            if echo "${PR_TITLE}" | grep -qP '(github\.com|k8s\.io|sigs\.k8s\.io|golang\.org|google\.golang\.org|go\.uber\.org|gopkg\.in)/'; then
+              LABEL_TYPE="minor"
+            elif echo "${PR_TITLE}" | grep -qiE '\bmodule\b'; then
+              LABEL_TYPE="minor"
+            else
+              LABEL_TYPE="patch"
+            fi
           fi
 
           if [[ "${LABEL_TYPE}" == "unknown" ]]; then

@@ -1,0 +1,147 @@
+name: Auto-approve low-risk dependency PRs
+
+# Runs after CI completes on a PR. If the PR is a low-risk Renovate update
+# (patch/digest dep bump, tekton task ref, dockerfile, or rpm-lockfile) and
+# all required checks passed, it adds approved/lgtm labels so the merge bot
+# can merge it automatically.
+#
+# Using workflow_run ensures this workflow has write permissions regardless
+# of whether the PR comes from a fork/bot.
+
+on:
+  workflow_run:
+    workflows: ["Tests", "Lint", "E2E Tests"]
+    types: [completed]
+
+jobs:
+  auto-approve:
+    name: Label approved if CI passed
+    runs-on: ubuntu-latest
+    # Only proceed when the triggering workflow was for a pull request
+    if: github.event.workflow_run.event == 'pull_request'
+    permissions:
+      pull-requests: write
+      issues: write
+      actions: read
+      checks: read
+      statuses: read
+
+    steps:
+      - name: Find PR and check eligibility
+        id: eligible
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # workflow_run provides the head SHA; find the associated PR
+          PR_NUMBER=$(gh api "repos/${{ github.repository }}/pulls" \
+            --jq ".[] | select(.head.sha == \"${{ github.event.workflow_run.head_sha }}\") | .number" \
+            | head -1)
+
+          if [[ -z "${PR_NUMBER}" ]]; then
+            echo "No open PR found for SHA ${{ github.event.workflow_run.head_sha }}"
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+
+          # Fetch all PR metadata in a single call
+          PR_DATA=$(gh pr view "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --json author,labels,title,headRefName)
+
+          AUTHOR=$(echo "${PR_DATA}" | jq -r '.author.login')
+          LABELS=$(echo "${PR_DATA}" | jq -r '.labels[].name')
+          PR_TITLE=$(echo "${PR_DATA}" | jq -r '.title')
+          PR_BRANCH=$(echo "${PR_DATA}" | jq -r '.headRefName')
+
+          # Must be from Renovate or Mintmaker
+          if [[ "${AUTHOR}" != "renovate[bot]" && "${AUTHOR}" != "red-hat-konflux[bot]" ]]; then
+            echo "PR author ${AUTHOR} is not a dependency bot, skipping"
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Must NOT already have approved label (idempotency)
+          if echo "${LABELS}" | grep -q "^approved$"; then
+            echo "PR already has approved label, skipping"
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Must be a low-risk update: patch/digest gomod, tekton, dockerfile, or rpm-lockfile
+          IS_PATCH=false
+          if echo "${LABELS}" | grep -q "^semver/patch$"; then
+            IS_PATCH=true
+          fi
+
+          # Check for non-gomod managers that we also auto-approve
+          IS_INFRA=false
+          if [[ "${PR_TITLE}" == *"update konflux references"* ]] || \
+             [[ "${PR_BRANCH}" == *"dockerfile"* && "${PR_TITLE}" != *"go-toolset"* ]] || \
+             [[ "${PR_BRANCH}" == *"rpm-lockfile"* ]]; then
+            IS_INFRA=true
+          fi
+
+          if [[ "${IS_PATCH}" != "true" && "${IS_INFRA}" != "true" ]]; then
+            echo "PR is not a patch bump or infra update, skipping"
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "PR #${PR_NUMBER} is eligible for auto-approve"
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check all CI checks passed
+        if: steps.eligible.outputs.eligible == 'true'
+        id: ci
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
+
+          # Get all check runs in a single call and extract counts
+          CHECK_RUNS=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/check-runs" \
+            --jq '.check_runs[] | select(.name != "Label approved if CI passed")')
+
+          FAILED_CHECKS=$(echo "${CHECK_RUNS}" | jq -s '[.[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral")] | length')
+          PENDING_CHECKS=$(echo "${CHECK_RUNS}" | jq -s '[.[] | select(.conclusion == null)] | length')
+
+          echo "Failed checks: ${FAILED_CHECKS}, Pending checks: ${PENDING_CHECKS}"
+
+          if [[ "${FAILED_CHECKS}" -gt 0 ]]; then
+            echo "Some checks failed, not approving"
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${PENDING_CHECKS}" -gt 0 ]]; then
+            echo "Some checks still pending, not approving yet (will re-run when they complete)"
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "All checks passed"
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Apply approved and lgtm labels
+        if: >-
+          steps.eligible.outputs.eligible == 'true' &&
+          steps.ci.outputs.passed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.eligible.outputs.number }}"
+
+          # Create labels if they don't exist
+          for label in approved lgtm; do
+            gh label create "${label}" --repo "${{ github.repository }}" \
+              --color "0e8a16" --description "Auto-approved dependency update" \
+              --force 2>/dev/null || true
+          done
+
+          gh pr edit "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --add-label "approved,lgtm"
+
+          echo "Applied approved and lgtm labels to PR #${PR_NUMBER}"
