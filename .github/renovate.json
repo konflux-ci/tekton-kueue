@@ -4,7 +4,6 @@
     "github>konflux-ci/mintmaker//config/renovate/renovate.json"
   ],
   "schedule": ["before 7am on Monday"],
-  "minimumReleaseAge": "3 days",
   "enabledManagers": [
     "tekton",
     "dockerfile",
@@ -24,12 +23,14 @@
   },
   "packageRules": [
     {
-      "description": "Group and auto-merge go module patch bumps together",
-      "groupName": "go-modules patch",
+      "description": "Individual PRs for go module patch bumps (auto-approved after CI passes)",
       "matchManagers": ["gomod"],
-      "matchUpdateTypes": ["patch", "digest"],
-      "automerge": true,
-      "addLabels": ["approved", "lgtm", "auto-merged"]
+      "matchUpdateTypes": ["patch"]
+    },
+    {
+      "description": "Individual PRs for go module digest bumps (pseudo-versions have no semver guarantees, treated as minor)",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["digest"]
     },
     {
       "description": "Individual PRs for go module minor bumps",
@@ -50,21 +51,6 @@
       "matchUpdateTypes": ["minor", "major", "digest"]
     },
     {
-      "description": "Label patch version bumps",
-      "matchUpdateTypes": ["patch", "digest"],
-      "addLabels": ["semver/patch"]
-    },
-    {
-      "description": "Label minor version bumps",
-      "matchUpdateTypes": ["minor"],
-      "addLabels": ["semver/minor"]
-    },
-    {
-      "description": "Label major version bumps",
-      "matchUpdateTypes": ["major"],
-      "addLabels": ["semver/major"]
-    },
-    {
       "description": "Label direct dependencies",
       "matchManagers": ["gomod"],
       "matchDepTypes": ["dependencies"],
@@ -79,28 +65,21 @@
     {
       "description": "Prioritize Konflux tekton task reference updates",
       "matchManagers": ["tekton"],
-      "prPriority": 10,
-      "automerge": true,
-      "addLabels": ["approved", "lgtm", "auto-merged"]
+      "prPriority": 10
     },
     {
-      "description": "Auto-merge dockerfile updates (except Go toolchain)",
+      "description": "Dockerfile updates (except Go toolchain, auto-approved after CI passes)",
       "matchManagers": ["dockerfile"],
-      "excludePackagePatterns": ["go-toolset"],
-      "automerge": true,
-      "addLabels": ["approved", "lgtm", "auto-merged"]
+      "excludePackagePatterns": ["go-toolset"]
     },
     {
-      "description": "Go toolchain updates require manual review",
+      "description": "Go toolchain updates — deptriage defers approval until CI passes",
       "matchManagers": ["dockerfile"],
-      "matchPackagePatterns": ["go-toolset"],
-      "automerge": false
+      "matchPackagePatterns": ["go-toolset"]
     },
     {
-      "description": "Auto-merge rpm-lockfile updates",
-      "matchManagers": ["rpm-lockfile"],
-      "automerge": true,
-      "addLabels": ["approved", "lgtm", "auto-merged"]
+      "description": "RPM lockfile updates (auto-approved after CI passes)",
+      "matchManagers": ["rpm-lockfile"]
     },
     {
       "description": "Block kueue upgrades beyond 0.16.x — kueue v0.17+ drops v1beta1 API support entirely",
