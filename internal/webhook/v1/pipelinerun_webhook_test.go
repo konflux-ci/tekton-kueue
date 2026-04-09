@@ -361,6 +361,24 @@ var minimalPipelineRunJSON = []byte(`{
 	}
 }`)
 
+// prePopulatedPipelineRunJSON is a raw  admission request. It has all the fields prepopulated
+// Webhook is not supposed apply any patch here
+var prePopulatedPipelineRunJSON = []byte(`{
+	"apiVersion": "tekton.dev/v1",
+	"kind": "PipelineRun",
+	"metadata": {
+		"name": "test-plr",
+		"namespace": "default",
+		"labels" : {
+			"kueue.x-k8s.io/queue-name": "test-queue"
+		}
+	},
+	"spec": {
+		"status" : "PipelineRunPending",
+		"pipelineRef": {"name": "test-pipeline"}
+	}
+}`)
+
 // fieldsWeNeverTouch lists spec/status fields the webhook should never patch.
 var fieldsWeNeverTouch = []string{
 	"taskRunTemplate",
@@ -392,9 +410,9 @@ var _ = Describe("Zero-value field leak (issue #319)", func() {
 	})
 
 	It("raw CustomDefaulter leaks zero-value struct fields into patches", func(ctx context.Context) {
+
 		defaulter, err := NewCustomDefaulter(cfgStore)
 		Expect(err).NotTo(HaveOccurred())
-
 		unfiltered := admission.WithCustomDefaulter(scheme, &tektondevv1.PipelineRun{}, defaulter)
 		resp := unfiltered.Handle(ctx, makeAdmissionRequest(minimalPipelineRunJSON))
 		Expect(resp.Allowed).To(BeTrue())
@@ -439,5 +457,23 @@ var _ = Describe("Zero-value field leak (issue #319)", func() {
 					fmt.Sprintf("patch at %s still contains '%s' after filtering", p.Path, field))
 			}
 		}
+	})
+
+	// This Test validates the case when PipelineRun Contains all the fields and Webhook is not expected to apply Any patch.
+	// In Such Scenario Handler webhook should set the Patch and PatchType to Nil
+	// Both these values should be sync otherwise Kubernetes will not be able to process the PipelineRun.
+	It("patchFilteringWebhook sets Patch and PatchType to nil when there is nothing to patch", func(ctx context.Context) {
+		defaulter, err := NewCustomDefaulter(cfgStore)
+		Expect(err).NotTo(HaveOccurred())
+
+		inner := admission.WithCustomDefaulter(scheme, &tektondevv1.PipelineRun{}, defaulter)
+		filtered := &patchFilteringWebhook{inner: inner}
+
+		resp := filtered.Handle(ctx, makeAdmissionRequest(prePopulatedPipelineRunJSON))
+
+		Expect(resp.Allowed).To(BeTrue())
+		Expect(resp.Patches).To(BeEmpty())
+		Expect(resp.Patch).To(BeNil())
+		Expect(resp.PatchType).To(BeNil())
 	})
 })
