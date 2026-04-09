@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -18,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/utils/ptr"
 	kapi "knative.dev/pkg/apis"
 
 	kueueconfig "sigs.k8s.io/kueue/apis/config/v1beta1"
@@ -143,7 +145,10 @@ func (p *PipelineRun) Object() client.Object {
 
 // PodSets implements jobframework.GenericJob.
 func (p *PipelineRun) PodSets() ([]kueue.PodSet, error) {
-	requests := p.resourcesRequests()
+	requests, err := p.resourcesRequests()
+	if err != nil {
+		return nil, err
+	}
 
 	return []kueue.PodSet{
 		{
@@ -177,22 +182,48 @@ func (p *PipelineRun) PodSets() ([]kueue.PodSet, error) {
 // By default, a resource which indicates that the workload requires 1
 // PipelineRun will be added. This is useful for controlling the number
 // of PipelineRuns that can be executed concurrently.
-//
-// WARNING: Annotations are not validated and a panic will
-// happen if they can not be parsed as `resource.Quantity`.
-func (p *PipelineRun) resourcesRequests() corev1.ResourceList {
+func (p *PipelineRun) resourcesRequests() (corev1.ResourceList, error) {
 	requests := corev1.ResourceList{
 		ResourcePipelineRunCount: resource.MustParse("1"),
 	}
 
 	for k, v := range p.GetAnnotations() {
-		if t := strings.TrimPrefix(k, annotationResourcesRequests); t != k {
-			// TODO(@filariow): how to properly validate this?
-			requests[corev1.ResourceName(t)] = resource.MustParse(v)
+		n, q, err := p.parseResourcesRequestsAnnotation(k, v)
+		switch {
+		case err != nil:
+			return nil, err
+		case n != nil && q != nil:
+			requests[*n] = *q
 		}
 	}
 
-	return requests
+	return requests, nil
+}
+
+// parseResourcesRequestsAnnotation checks if an annotation is a ResourcesRequests one.
+// It validates the extracted key and value. If the annotation is invalid the PipelineRun can not
+// be correctly processed and it needs to be fixed. To avoid a reconciliation loop an
+// UnretryableError is returned. This will tell Kueue's reconciler to avoid reconciling the
+// PipelineRun at current state again. If a new event on the PipelineRun occurs, a new
+// reconciliation will start.
+func (p *PipelineRun) parseResourcesRequestsAnnotation(k, v string) (*corev1.ResourceName, *resource.Quantity, error) {
+	t, ok := strings.CutPrefix(k, annotationResourcesRequests)
+	if !ok {
+		return nil, nil, nil
+	}
+
+	if t == "" {
+		return nil, nil, jobframework.UnretryableError(
+			fmt.Sprintf("empty resource name in annotation %s", k))
+	}
+
+	q, err := resource.ParseQuantity(v)
+	if err != nil {
+		return nil, nil, jobframework.UnretryableError(
+			fmt.Sprintf("invalid resource quantity in annotation %s=%q: %v", k, v, err))
+	}
+
+	return ptr.To(corev1.ResourceName(t)), &q, nil
 }
 
 // PodsReady implements jobframework.GenericJob.
