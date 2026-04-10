@@ -153,7 +153,7 @@ var _ = Describe("Manager", Ordered, func() {
 	// and deleting the namespace. Set SKIP_CLEANUP=true to keep resources running (e.g., for
 	// collecting coverage data from instrumented pods before teardown).
 	AfterAll(func() {
-		if skipCleanup := os.Getenv("SKIP_CLEANUP"); skipCleanup != "" {
+		if os.Getenv("SKIP_CLEANUP") == "true" { //nolint:goconst
 			By("skipping cleanup because SKIP_CLEANUP is set")
 			return
 		}

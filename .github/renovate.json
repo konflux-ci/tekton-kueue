@@ -3,23 +3,128 @@
   "extends": [
     "github>konflux-ci/mintmaker//config/renovate/renovate.json"
   ],
+  "schedule": ["before 7am on Monday"],
+  "minimumReleaseAge": "3 days",
   "enabledManagers": [
     "tekton",
     "dockerfile",
-    "rpm-lockfile"
+    "rpm-lockfile",
+    "gomod",
+    "github-actions"
   ],
   "addLabels": [
-    "approved",
-    "lgtm",
     "konflux",
     "mintmaker"
   ],
   "ignorePaths": ["upstream/**"],
-  "autoApprove": true,
+  "gomod": {
+    "postUpdateOptions": [
+      "gomodTidy"
+    ]
+  },
   "packageRules": [
     {
-      "matchPackageNames": ["*"],
-      "automerge": true
+      "description": "Group and auto-merge go module patch bumps together",
+      "groupName": "go-modules patch",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["patch", "digest"],
+      "automerge": true,
+      "addLabels": ["approved", "lgtm", "auto-merged"]
+    },
+    {
+      "description": "Individual PRs for go module minor bumps",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor"]
+    },
+    {
+      "description": "Individual PRs for go module major bumps (no groupName = one PR per package)",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["major"]
+    },
+    {
+      "description": "Group Kubernetes and controller-runtime updates together",
+      "groupName": "go-modules k8s",
+      "matchManagers": ["gomod"],
+      "matchPackagePatterns": ["^k8s\\.io/"],
+      "matchPackageNames": ["sigs.k8s.io/controller-runtime"],
+      "matchUpdateTypes": ["minor", "major", "digest"]
+    },
+    {
+      "description": "Label patch version bumps",
+      "matchUpdateTypes": ["patch", "digest"],
+      "addLabels": ["semver/patch"]
+    },
+    {
+      "description": "Label minor version bumps",
+      "matchUpdateTypes": ["minor"],
+      "addLabels": ["semver/minor"]
+    },
+    {
+      "description": "Label major version bumps",
+      "matchUpdateTypes": ["major"],
+      "addLabels": ["semver/major"]
+    },
+    {
+      "description": "Label direct dependencies",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["dependencies"],
+      "addLabels": ["dependency/direct"]
+    },
+    {
+      "description": "Label transitive (indirect) dependencies",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["indirect"],
+      "addLabels": ["dependency/transitive"]
+    },
+    {
+      "description": "Prioritize Konflux tekton task reference updates",
+      "matchManagers": ["tekton"],
+      "prPriority": 10,
+      "automerge": true,
+      "addLabels": ["approved", "lgtm", "auto-merged"]
+    },
+    {
+      "description": "Auto-merge dockerfile updates (except Go toolchain)",
+      "matchManagers": ["dockerfile"],
+      "excludePackagePatterns": ["go-toolset"],
+      "automerge": true,
+      "addLabels": ["approved", "lgtm", "auto-merged"]
+    },
+    {
+      "description": "Go toolchain updates require manual review",
+      "matchManagers": ["dockerfile"],
+      "matchPackagePatterns": ["go-toolset"],
+      "automerge": false
+    },
+    {
+      "description": "Auto-merge rpm-lockfile updates",
+      "matchManagers": ["rpm-lockfile"],
+      "automerge": true,
+      "addLabels": ["approved", "lgtm", "auto-merged"]
+    },
+    {
+      "description": "Block kueue upgrades beyond 0.14.x — infra-deployments kueue only serves v1beta1 with no conversion webhook, and kueue >=0.15 requires v1beta2",
+      "matchManagers": ["gomod"],
+      "matchPackageNames": ["sigs.k8s.io/kueue"],
+      "allowedVersions": "<0.15.0"
+    },
+    {
+      "description": "Block k8s library upgrades beyond 0.34.x — kueue v0.14.x is incompatible with k8s >=0.35 due to breaking API changes (e.g. FindMatchingUntoleratedTaint signature)",
+      "matchManagers": ["gomod"],
+      "matchPackagePatterns": ["^k8s\\.io/"],
+      "allowedVersions": "<0.35.0"
+    },
+    {
+      "description": "Block controller-runtime upgrades beyond 0.22.x — kueue v0.14.x is incompatible with controller-runtime >=0.23 due to breaking changes in webhook and defaulter interfaces",
+      "matchManagers": ["gomod"],
+      "matchPackageNames": ["sigs.k8s.io/controller-runtime"],
+      "allowedVersions": "<0.23.0"
+    },
+    {
+      "description": "Block tektoncd/pipeline upgrades beyond 1.10.x — v1.11+ pulls k8s >=0.35 which is incompatible with kueue v0.14.x",
+      "matchManagers": ["gomod"],
+      "matchPackageNames": ["github.com/tektoncd/pipeline"],
+      "allowedVersions": "<1.11.0"
     }
   ]
 }
