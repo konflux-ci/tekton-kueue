@@ -150,8 +150,14 @@ var _ = Describe("Manager", Ordered, func() {
 	})
 
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
-	// and deleting the namespace.
+	// and deleting the namespace. Set SKIP_CLEANUP=true to keep resources running (e.g., for
+	// collecting coverage data from instrumented pods before teardown).
 	AfterAll(func() {
+		if os.Getenv("SKIP_CLEANUP") == "true" { //nolint:goconst
+			By("skipping cleanup because SKIP_CLEANUP is set")
+			return
+		}
+
 		By("cleaning up the curl pod for metrics")
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
 		_, _ = utils.Run(cmd)
