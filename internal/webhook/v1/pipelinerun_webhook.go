@@ -84,6 +84,7 @@ func (w *patchFilteringWebhook) Handle(ctx context.Context, req admission.Reques
 	resp.Patches = resp.Patches[:n]
 	if n == 0 {
 		resp.PatchType = nil
+		resp.Patch = nil
 	}
 	return resp
 }
