@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -77,6 +78,8 @@ type SharedFlags struct {
 	ProbeAddr       string
 	EnableHTTP2     bool
 	ZapOptions      *zap.Options
+	QPS             float64
+	Burst           int
 }
 
 func (s *SharedFlags) AddFlags(fs *flag.FlagSet) {
@@ -93,6 +96,8 @@ func (s *SharedFlags) AddFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.ProbeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	fs.BoolVar(&s.EnableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	fs.Float64Var(&s.QPS, "qps", 0, "The Kubernetes API Client's QPS value")
+	fs.IntVar(&s.Burst, "burst", 0, "The Kubernetes API Client's Burst value")
 
 	s.ZapOptions = &zap.Options{
 		Development: true,
@@ -204,7 +209,20 @@ func runController(args []string) {
 		setupLog.Info("Leader election disabled")
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	cfg := ctrl.GetConfigOrDie()
+	// if Burst is set to 0, controller-runtime Client's default is used
+	cfg.Burst = controllerFlags.Burst
+	// ensure the provided value is a safe float32. If it's not, we set 0 and the
+	// controller-runtime's Client will use its default value.
+	qps, ok := safeFloat64ToFloat32OrDefault(controllerFlags.QPS, 0)
+	if !ok {
+		setupLog.
+			WithValues("provided-qps", controllerFlags.QPS, "used-qps", qps).
+			Info("provided QPS value is not a valid float32, using default")
+	}
+	cfg.QPS = qps
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: controllerFlags.ProbeAddr,
@@ -271,7 +289,20 @@ func runWebhook(args []string) {
 		setupLog.Error(err, "Exiting")
 		os.Exit(1)
 	}
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	cfg := ctrl.GetConfigOrDie()
+	// if Burst is set to 0, controller-runtime Client's default is used
+	cfg.Burst = webhookFlags.Burst
+	// ensure the provided value is a safe float32. If it's not, we set 0 and the
+	// controller-runtime's Client will use its default value.
+	qps, ok := safeFloat64ToFloat32OrDefault(webhookFlags.QPS, 0)
+	if !ok {
+		setupLog.
+			WithValues("provided-qps", webhookFlags.QPS, "used-qps", qps).
+			Info("provided QPS value is not a valid float32, using default")
+	}
+	cfg.QPS = qps
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: webhookFlags.ProbeAddr,
@@ -317,6 +348,13 @@ func runWebhook(args []string) {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func safeFloat64ToFloat32OrDefault(v float64, d float32) (float32, bool) {
+	if math.IsInf(v, 0) || math.IsNaN(v) {
+		return d, false
+	}
+	return float32(v), true
 }
 
 func runMutate(args []string) {
