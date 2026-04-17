@@ -10,7 +10,7 @@ import (
 var _ = Describe("safeFloat64ToFloat32OrDefault", func() {
 	DescribeTable("converts valid float32 values",
 		func(v float64, e float32) {
-			a, ok := safeFloat64ToFloat32OrDefault(v, 0)
+			a, ok := safeFloat64ToFloat32OrZero(v)
 			Expect(ok).To(BeTrue())
 			Expect(a).To(Equal(e))
 		},
@@ -25,11 +25,9 @@ var _ = Describe("safeFloat64ToFloat32OrDefault", func() {
 
 	DescribeTable("returns default value if provided value is not a valid float32",
 		func(v float64) {
-			d := float32(0)
-
-			a, ok := safeFloat64ToFloat32OrDefault(v, d)
+			a, ok := safeFloat64ToFloat32OrZero(v)
 			Expect(ok).To(BeFalse(), "provided value '%v' is recognized as legit", v)
-			Expect(a).To(Equal(d))
+			Expect(a).To(Equal(float32(0)))
 		},
 		Entry("Above Max Float32", math.Nextafter(float64(math.MaxFloat32), math.MaxFloat64)),
 		Entry("Below Min Float32", -(math.Nextafter(float64(math.MaxFloat32), math.MaxFloat64))),

@@ -214,7 +214,7 @@ func runController(args []string) {
 	cfg.Burst = controllerFlags.Burst
 	// ensure the provided value is a safe float32. If it's not, we set 0 and the
 	// controller-runtime's Client will use its default value.
-	qps, ok := safeFloat64ToFloat32OrDefault(controllerFlags.QPS, 0)
+	qps, ok := safeFloat64ToFloat32OrZero(controllerFlags.QPS)
 	if !ok {
 		setupLog.
 			WithValues("provided-qps", controllerFlags.QPS, "used-qps", qps).
@@ -294,7 +294,7 @@ func runWebhook(args []string) {
 	cfg.Burst = webhookFlags.Burst
 	// ensure the provided value is a safe float32. If it's not, we set 0 and the
 	// controller-runtime's Client will use its default value.
-	qps, ok := safeFloat64ToFloat32OrDefault(webhookFlags.QPS, 0)
+	qps, ok := safeFloat64ToFloat32OrZero(webhookFlags.QPS)
 	if !ok {
 		setupLog.
 			WithValues("provided-qps", webhookFlags.QPS, "used-qps", qps).
@@ -350,9 +350,9 @@ func runWebhook(args []string) {
 	}
 }
 
-func safeFloat64ToFloat32OrDefault(v float64, d float32) (float32, bool) {
+func safeFloat64ToFloat32OrZero(v float64) (float32, bool) {
 	if v < -math.MaxFloat32 || v > math.MaxFloat32 {
-		return d, false
+		return 0, false
 	}
 	return float32(v), true
 }
