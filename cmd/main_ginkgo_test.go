@@ -33,5 +33,8 @@ var _ = Describe("safeFloat64ToFloat32OrDefault", func() {
 		Entry("Below Min Float32", -(math.Nextafter(float64(math.MaxFloat32), math.MaxFloat64))),
 		Entry("Max Float64", float64(math.MaxFloat64)),
 		Entry("Min Float64", float64(-math.MaxFloat64)),
+		Entry("NaN", math.NaN()),
+		Entry("Inf", math.Inf(+1)),
+		Entry("-Inf", math.Inf(-1)),
 	)
 })

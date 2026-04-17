@@ -351,7 +351,7 @@ func runWebhook(args []string) {
 }
 
 func safeFloat64ToFloat32OrZero(v float64) (float32, bool) {
-	if v < -math.MaxFloat32 || v > math.MaxFloat32 {
+	if math.IsNaN(v) || math.IsInf(v, 0) || v < -math.MaxFloat32 || v > math.MaxFloat32 {
 		return 0, false
 	}
 	return float32(v), true
