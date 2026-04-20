@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("safeFloat64ToFloat32OrDefault", func() {
+var _ = Describe("safeFloat64ToFloat32OrZero", func() {
 	DescribeTable("converts valid float32 values",
 		func(v float64, e float32) {
 			a, ok := safeFloat64ToFloat32OrZero(v)
