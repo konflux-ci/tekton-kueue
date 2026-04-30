@@ -95,6 +95,9 @@ func SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 		mgr.GetClient(),
 		mgr.GetFieldIndexer(),
 		mgr.GetEventRecorderFor("kueue-plr"),
+		// In v1beta2, WaitForPodsReady removed its Enable bool field — a non-nil
+		// pointer now means the feature is enabled. Pass nil to keep it disabled,
+		// matching the original v1beta1 behavior where Enable defaulted to false.
 		jobframework.WithWaitForPodsReady((*kueueconfig.WaitForPodsReady)(nil)),
 	)
 	if err != nil {

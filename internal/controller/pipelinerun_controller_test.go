@@ -111,9 +111,9 @@ var _ = Describe("PipelineRun", func() {
 	})
 
 	Describe("PodsReady", func() {
-		It("should panic because it should not be called", func() {
+		It("should panic because it should not be called", func(ctx context.Context) {
 			p := newTestPipelineRun()
-			Expect(func() { p.PodsReady(context.TODO()) }).To(PanicWith("pods ready shouldn't be called"))
+			Expect(func() { p.PodsReady(ctx) }).To(PanicWith("pods ready shouldn't be called"))
 		})
 	})
 
@@ -130,11 +130,11 @@ var _ = Describe("PipelineRun", func() {
 	})
 
 	DescribeTable("RunWithPodSetsInfo should clear Spec.Status regardless of prior value",
-		func(initialStatus string) {
+		func(ctx context.Context, initialStatus string) {
 			p := newTestPipelineRun(func(plr *tekv1.PipelineRun) {
 				plr.Spec.Status = tekv1.PipelineRunSpecStatus(initialStatus)
 			})
-			Expect(p.RunWithPodSetsInfo(context.TODO(), nil)).To(Succeed())
+			Expect(p.RunWithPodSetsInfo(ctx, nil)).To(Succeed())
 			Expect(p.Spec.Status).To(BeEmpty())
 		},
 		Entry("when status is empty", ""),
@@ -154,15 +154,15 @@ var _ = Describe("PipelineRun", func() {
 	})
 
 	Describe("Finished", func() {
-		It("should return empty values when no condition is set", func() {
+		It("should return empty values when no condition is set", func(ctx context.Context) {
 			p := newTestPipelineRun()
-			msg, success, finished := p.Finished(context.TODO())
+			msg, success, finished := p.Finished(ctx)
 			Expect(msg).To(BeEmpty())
 			Expect(success).To(BeFalse())
 			Expect(finished).To(BeFalse())
 		})
 
-		It("should report success when reason is Successful", func() {
+		It("should report success when reason is Successful", func(ctx context.Context) {
 			p := newTestPipelineRun(func(plr *tekv1.PipelineRun) {
 				plr.Status.Conditions = []kapi.Condition{
 					{
@@ -173,13 +173,13 @@ var _ = Describe("PipelineRun", func() {
 					},
 				}
 			})
-			msg, success, finished := p.Finished(context.TODO())
+			msg, success, finished := p.Finished(ctx)
 			Expect(msg).To(Equal("All tasks completed successfully"))
 			Expect(success).To(BeTrue())
 			Expect(finished).To(BeTrue())
 		})
 
-		It("should report success when reason is Completed", func() {
+		It("should report success when reason is Completed", func(ctx context.Context) {
 			p := newTestPipelineRun(func(plr *tekv1.PipelineRun) {
 				plr.Status.Conditions = []kapi.Condition{
 					{
@@ -190,13 +190,13 @@ var _ = Describe("PipelineRun", func() {
 					},
 				}
 			})
-			msg, success, finished := p.Finished(context.TODO())
+			msg, success, finished := p.Finished(ctx)
 			Expect(msg).To(Equal("Pipeline completed"))
 			Expect(success).To(BeTrue())
 			Expect(finished).To(BeTrue())
 		})
 
-		It("should report failure when PipelineRun has failed", func() {
+		It("should report failure when PipelineRun has failed", func(ctx context.Context) {
 			p := newTestPipelineRun(func(plr *tekv1.PipelineRun) {
 				plr.Status.Conditions = []kapi.Condition{
 					{
@@ -207,13 +207,13 @@ var _ = Describe("PipelineRun", func() {
 					},
 				}
 			})
-			msg, success, finished := p.Finished(context.TODO())
+			msg, success, finished := p.Finished(ctx)
 			Expect(msg).To(Equal("Task my-task failed"))
 			Expect(success).To(BeFalse())
 			Expect(finished).To(BeTrue())
 		})
 
-		It("should report not finished when condition status is Unknown", func() {
+		It("should report not finished when condition status is Unknown", func(ctx context.Context) {
 			p := newTestPipelineRun(func(plr *tekv1.PipelineRun) {
 				plr.Status.Conditions = []kapi.Condition{
 					{
@@ -224,7 +224,7 @@ var _ = Describe("PipelineRun", func() {
 					},
 				}
 			})
-			msg, success, finished := p.Finished(context.TODO())
+			msg, success, finished := p.Finished(ctx)
 			Expect(msg).To(Equal("Tasks are still running"))
 			Expect(success).To(BeFalse())
 			Expect(finished).To(BeFalse())
@@ -344,9 +344,9 @@ var _ = Describe("PipelineRun", func() {
 	})
 
 	Describe("PodSets", func() {
-		It("should return a single pod set with the correct structure", func() {
+		It("should return a single pod set with the correct structure", func(ctx context.Context) {
 			p := newTestPipelineRun()
-			podSets, err := p.PodSets(context.TODO())
+			podSets, err := p.PodSets(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podSets).To(HaveLen(1))
 
@@ -360,14 +360,14 @@ var _ = Describe("PipelineRun", func() {
 			Expect(containers[0].Image).To(Equal("dummy"))
 		})
 
-		It("should include resource requests from annotations in the pod set", func() {
+		It("should include resource requests from annotations in the pod set", func(ctx context.Context) {
 			p := newTestPipelineRun(func(plr *tekv1.PipelineRun) {
 				plr.Annotations = map[string]string{
 					"kueue.konflux-ci.dev/requests-cpu":    "4",
 					"kueue.konflux-ci.dev/requests-memory": "8Gi",
 				}
 			})
-			podSets, err := p.PodSets(context.TODO())
+			podSets, err := p.PodSets(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podSets).To(HaveLen(1))
 			Expect(podSets[0].Template.Spec.Containers).To(HaveLen(1))
@@ -380,13 +380,13 @@ var _ = Describe("PipelineRun", func() {
 			))
 		})
 
-		It("should return an unretryable error when annotation has invalid resource quantity", func() {
+		It("should return an unretryable error when annotation has invalid resource quantity", func(ctx context.Context) {
 			p := newTestPipelineRun(func(plr *tekv1.PipelineRun) {
 				plr.Annotations = map[string]string{
 					"kueue.konflux-ci.dev/requests-cpu": "not-a-quantity",
 				}
 			})
-			Expect(p.PodSets(context.TODO())).Error().To(And(
+			Expect(p.PodSets(ctx)).Error().To(And(
 				MatchError(ContainSubstring("invalid resource quantity")),
 				Satisfy(jobframework.IsUnretryableError),
 			))
