@@ -113,7 +113,7 @@ var _ = Describe("PipelineRun", func() {
 	Describe("PodsReady", func() {
 		It("should panic because it should not be called", func() {
 			p := newTestPipelineRun()
-			Expect(func() { p.PodsReady() }).To(PanicWith("pods ready shouldn't be called"))
+			Expect(func() { p.PodsReady(context.TODO()) }).To(PanicWith("pods ready shouldn't be called"))
 		})
 	})
 
@@ -134,7 +134,7 @@ var _ = Describe("PipelineRun", func() {
 			p := newTestPipelineRun(func(plr *tekv1.PipelineRun) {
 				plr.Spec.Status = tekv1.PipelineRunSpecStatus(initialStatus)
 			})
-			Expect(p.RunWithPodSetsInfo(nil)).To(Succeed())
+			Expect(p.RunWithPodSetsInfo(context.TODO(), nil)).To(Succeed())
 			Expect(p.Spec.Status).To(BeEmpty())
 		},
 		Entry("when status is empty", ""),
@@ -156,7 +156,7 @@ var _ = Describe("PipelineRun", func() {
 	Describe("Finished", func() {
 		It("should return empty values when no condition is set", func() {
 			p := newTestPipelineRun()
-			msg, success, finished := p.Finished()
+			msg, success, finished := p.Finished(context.TODO())
 			Expect(msg).To(BeEmpty())
 			Expect(success).To(BeFalse())
 			Expect(finished).To(BeFalse())
@@ -173,7 +173,7 @@ var _ = Describe("PipelineRun", func() {
 					},
 				}
 			})
-			msg, success, finished := p.Finished()
+			msg, success, finished := p.Finished(context.TODO())
 			Expect(msg).To(Equal("All tasks completed successfully"))
 			Expect(success).To(BeTrue())
 			Expect(finished).To(BeTrue())
@@ -190,7 +190,7 @@ var _ = Describe("PipelineRun", func() {
 					},
 				}
 			})
-			msg, success, finished := p.Finished()
+			msg, success, finished := p.Finished(context.TODO())
 			Expect(msg).To(Equal("Pipeline completed"))
 			Expect(success).To(BeTrue())
 			Expect(finished).To(BeTrue())
@@ -207,7 +207,7 @@ var _ = Describe("PipelineRun", func() {
 					},
 				}
 			})
-			msg, success, finished := p.Finished()
+			msg, success, finished := p.Finished(context.TODO())
 			Expect(msg).To(Equal("Task my-task failed"))
 			Expect(success).To(BeFalse())
 			Expect(finished).To(BeTrue())
@@ -224,7 +224,7 @@ var _ = Describe("PipelineRun", func() {
 					},
 				}
 			})
-			msg, success, finished := p.Finished()
+			msg, success, finished := p.Finished(context.TODO())
 			Expect(msg).To(Equal("Tasks are still running"))
 			Expect(success).To(BeFalse())
 			Expect(finished).To(BeFalse())
@@ -346,7 +346,7 @@ var _ = Describe("PipelineRun", func() {
 	Describe("PodSets", func() {
 		It("should return a single pod set with the correct structure", func() {
 			p := newTestPipelineRun()
-			podSets, err := p.PodSets()
+			podSets, err := p.PodSets(context.TODO())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podSets).To(HaveLen(1))
 
@@ -367,7 +367,7 @@ var _ = Describe("PipelineRun", func() {
 					"kueue.konflux-ci.dev/requests-memory": "8Gi",
 				}
 			})
-			podSets, err := p.PodSets()
+			podSets, err := p.PodSets(context.TODO())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podSets).To(HaveLen(1))
 			Expect(podSets[0].Template.Spec.Containers).To(HaveLen(1))
@@ -386,8 +386,7 @@ var _ = Describe("PipelineRun", func() {
 					"kueue.konflux-ci.dev/requests-cpu": "not-a-quantity",
 				}
 			})
-			_, err := p.PodSets()
-			Expect(err).To(And(
+			Expect(p.PodSets(context.TODO())).Error().To(And(
 				MatchError(ContainSubstring("invalid resource quantity")),
 				Satisfy(jobframework.IsUnretryableError),
 			))

@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	"sigs.k8s.io/kueue/pkg/controller/jobframework"
 	"sigs.k8s.io/kueue/pkg/podset"
 
@@ -33,7 +33,7 @@ import (
 	"k8s.io/utils/ptr"
 	kapi "knative.dev/pkg/apis"
 
-	kueueconfig "sigs.k8s.io/kueue/apis/config/v1beta1"
+	kueueconfig "sigs.k8s.io/kueue/apis/config/v1beta2"
 )
 
 // +kubebuilder:rbac:groups=scheduling.k8s.io,resources=priorityclasses,verbs=list;get;watch
@@ -95,7 +95,7 @@ func SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 		mgr.GetClient(),
 		mgr.GetFieldIndexer(),
 		mgr.GetEventRecorderFor("kueue-plr"),
-		jobframework.WithWaitForPodsReady(&kueueconfig.WaitForPodsReady{}),
+		jobframework.WithWaitForPodsReady((*kueueconfig.WaitForPodsReady)(nil)),
 	)
 	if err != nil {
 		return err
@@ -134,7 +134,7 @@ func (p *PipelineRun) Stop(ctx context.Context, c client.Client, _ []podset.PodS
 }
 
 // Finished implements jobframework.GenericJob.
-func (p *PipelineRun) Finished() (message string, success bool, finished bool) {
+func (p *PipelineRun) Finished(_ context.Context) (message string, success bool, finished bool) {
 	plr := (*tekv1.PipelineRun)(p)
 	condition := plr.Status.GetCondition(kapi.ConditionSucceeded)
 
@@ -176,7 +176,7 @@ func (p *PipelineRun) Object() client.Object {
 // so we use a dummy container whose resource requests are derived from
 // annotations on the PipelineRun. This allows Kueue to account for resources
 // without needing to know the actual task pod specifications.
-func (p *PipelineRun) PodSets() ([]kueue.PodSet, error) {
+func (p *PipelineRun) PodSets(_ context.Context) ([]kueue.PodSet, error) {
 	requests, err := p.resourcesRequests()
 	if err != nil {
 		return nil, err
@@ -262,7 +262,7 @@ func (p *PipelineRun) parseResourcesRequestsAnnotation(k, v string) (*corev1.Res
 // This method is never called because the WaitForPodsReady configuration is
 // not enabled for PipelineRuns. Kueue tracks pod readiness for batch Jobs,
 // but PipelineRuns manage their own pod lifecycle through Tekton.
-func (p *PipelineRun) PodsReady() bool {
+func (p *PipelineRun) PodsReady(_ context.Context) bool {
 	panic("pods ready shouldn't be called")
 }
 
@@ -272,7 +272,7 @@ func (p *PipelineRun) RestorePodSetsInfo(podSetsInfo []podset.PodSetInfo) bool {
 }
 
 // RunWithPodSetsInfo implements jobframework.GenericJob.
-func (p *PipelineRun) RunWithPodSetsInfo(podSetsInfo []podset.PodSetInfo) error {
+func (p *PipelineRun) RunWithPodSetsInfo(_ context.Context, podSetsInfo []podset.PodSetInfo) error {
 	p.Spec.Status = ""
 	return nil
 }
