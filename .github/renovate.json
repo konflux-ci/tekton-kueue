@@ -103,28 +103,16 @@
       "addLabels": ["approved", "lgtm", "auto-merged"]
     },
     {
-      "description": "Block kueue upgrades beyond 0.14.x — infra-deployments kueue only serves v1beta1 with no conversion webhook, and kueue >=0.15 requires v1beta2",
+      "description": "Block kueue upgrades beyond 0.16.x — kueue v0.17+ drops v1beta1 API support entirely",
       "matchManagers": ["gomod"],
       "matchPackageNames": ["sigs.k8s.io/kueue"],
-      "allowedVersions": "<0.15.0"
+      "allowedVersions": "<0.17.0"
     },
     {
-      "description": "Block k8s library upgrades beyond 0.34.x — kueue v0.14.x is incompatible with k8s >=0.35 due to breaking API changes (e.g. FindMatchingUntoleratedTaint signature)",
+      "description": "Block k8s library upgrades beyond 0.35.x — kueue v0.16.x is built against k8s 0.35",
       "matchManagers": ["gomod"],
       "matchPackagePatterns": ["^k8s\\.io/"],
-      "allowedVersions": "<0.35.0"
-    },
-    {
-      "description": "Block controller-runtime upgrades beyond 0.22.x — kueue v0.14.x is incompatible with controller-runtime >=0.23 due to breaking changes in webhook and defaulter interfaces",
-      "matchManagers": ["gomod"],
-      "matchPackageNames": ["sigs.k8s.io/controller-runtime"],
-      "allowedVersions": "<0.23.0"
-    },
-    {
-      "description": "Block tektoncd/pipeline upgrades beyond 1.10.x — v1.11+ pulls k8s >=0.35 which is incompatible with kueue v0.14.x",
-      "matchManagers": ["gomod"],
-      "matchPackageNames": ["github.com/tektoncd/pipeline"],
-      "allowedVersions": "<1.11.0"
+      "allowedVersions": "<0.36.0"
     }
   ]
 }
