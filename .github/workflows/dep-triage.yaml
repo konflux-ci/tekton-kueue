@@ -1,0 +1,33 @@
+name: Dependency Impact Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+concurrency:
+  group: dep-triage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    name: Triage dependency PR
+    if: >-
+      github.event.pull_request.user.login == 'renovate[bot]' ||
+      github.event.pull_request.user.login == 'red-hat-konflux[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      checks: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: konflux-ci/deptriage@main
+        with:
+          command: both
+          pr-number: ${{ github.event.pull_request.number }}
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          llm-provider: gemini
+          auto-approve: 'true'
+          auto-merge: 'true'
