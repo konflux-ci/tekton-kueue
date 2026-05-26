@@ -1,0 +1,33 @@
+name: Lint AGENTS.md
+
+on:
+  pull_request:
+    paths:
+      - AGENTS.md
+  push:
+    branches: [main]
+    paths:
+      - AGENTS.md
+
+permissions:
+  contents: read
+
+jobs:
+  agents-md-lint:
+    name: Check AGENTS.md line limit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate AGENTS.md
+        run: |
+          if [ ! -f AGENTS.md ]; then
+            echo "ERROR: AGENTS.md not found"
+            exit 1
+          fi
+          lines=$(wc -l < AGENTS.md)
+          echo "AGENTS.md has $lines lines (limit: 300)"
+          if [ "$lines" -gt 300 ]; then
+            echo "ERROR: AGENTS.md exceeds 300-line limit"
+            exit 1
+          fi
