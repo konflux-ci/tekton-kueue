@@ -4,11 +4,11 @@ go 1.25.3
 
 require (
 	github.com/go-logr/logr v1.4.3
-	github.com/google/cel-go v0.26.0
+	github.com/google/cel-go v0.27.0
 	github.com/onsi/ginkgo/v2 v2.27.5
 	github.com/onsi/gomega v1.39.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/tektoncd/pipeline v1.6.0
+	github.com/tektoncd/pipeline v1.9.2
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.35.5
 	k8s.io/apimachinery v0.35.5
