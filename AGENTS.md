@@ -16,6 +16,14 @@ resource-aware scheduling via admission webhook and CEL-based mutations.
 | Deploy         | `make deploy IMG=<tag>`                               |
 | Mutate CLI     | `tekton-kueue mutate --pipelinerun-file <f> --config-dir <d>` |
 
+### Single-File Verification
+
+- Lint package: `golangci-lint run ./path/to/package/`
+- Vet package: `go vet ./path/to/package/`
+- Test package: `go test ./path/to/package/`
+- Test with race: `go test -race ./path/to/package/`
+- Format file: `gofmt -w path/to/file.go`
+
 ## Project Layout
 
 - `cmd/` — entrypoint with subcommands: `controller`, `webhook`, `mutate`.
