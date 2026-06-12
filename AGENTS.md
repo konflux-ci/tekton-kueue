@@ -54,6 +54,15 @@ resource-aware scheduling via admission webhook and CEL-based mutations.
 - `dep-triage` — auto-triages Renovate/Konflux bot dependency PRs.
 - `auto-merge` — merges approved dependency PRs when all checks pass.
 
+## Pattern References
+
+When making common changes, use these as reference implementations:
+- **New CEL function**: see `internal/cel/compiler.go` (`createCELEnvironment` registers functions)
+- **New webhook mutation**: see `internal/webhook/v1/pipelinerun_webhook.go`
+- **New controller reconciler**: see `internal/controller/pipelinerun_controller.go`
+- **New CLI subcommand**: see `cmd/main.go` for dispatch and flag parsing, `pkg/mutate/` for logic
+- **Dependency management policy**: see `docs/dependency-policy.md`
+
 ## Gotchas
 
 - E2E tests use `KIND_EXPERIMENTAL_PROVIDER=podman`.
