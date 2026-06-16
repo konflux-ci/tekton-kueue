@@ -78,3 +78,9 @@ When making common changes, use these as reference implementations:
 - Kueue must have `pipelineruns.tekton.dev` in external frameworks config.
 - Changing CEL expression syntax may silently change PipelineRun mutations
   in production — always test with `mutate` CLI first.
+
+## Skills
+
+- Before opening a PR, writing a PR description, or interpreting CI results, read `skills/pr-workflow.md`
+- When a CI check fails on a PR, read `skills/ci-troubleshooting.md`
+- When working interactively on new features or significant changes, read `skills/brainstorming-workflow.md` before making changes
