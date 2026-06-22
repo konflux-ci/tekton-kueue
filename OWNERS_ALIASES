@@ -1,8 +1,10 @@
 aliases:
     konflux-infra-team:
+        - celeztyne
         - enkeefe00
         - eisraeli
         - filariow
+        - gcpsoares
         - gbenhaim
         - glevi-rh
         - hugares
@@ -12,4 +14,5 @@ aliases:
         - mshaposhnik
         - oswcab
         - sadlerap
+        - vsokolen-redhat
         - wbrefvem
