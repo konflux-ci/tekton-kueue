@@ -118,11 +118,11 @@ require (
 	k8s.io/apiserver v0.35.2 // indirect
 	k8s.io/component-base v0.35.2 // indirect
 	k8s.io/component-helpers v0.35.2 // indirect
-	k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e // indirect
+	k8s.io/kube-openapi v0.0.0-20260618221249-bc653b64f974 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.33.0 // indirect
 	sigs.k8s.io/jobset v0.10.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.1 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 	volcano.sh/apis v1.13.1-0.20251028070205-46d20c0699e7 // indirect
 )
