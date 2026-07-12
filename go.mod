@@ -1,6 +1,6 @@
 module github.com/konflux-ci/tekton-kueue
 
-go 1.25.3
+go 1.25.12
 
 require (
 	github.com/go-logr/logr v1.4.3
