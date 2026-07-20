@@ -130,5 +130,5 @@ require (
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.1 // indirect
-	volcano.sh/apis v1.13.1-0.20251028070205-46d20c0699e7 // indirect
+	volcano.sh/apis v1.15.0 // indirect
 )
