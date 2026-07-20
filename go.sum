@@ -117,8 +117,8 @@ github.com/kelseyhightower/envconfig v1.4.0 h1:Im6hONhd3pLkfDFsbRgu68RDNkGF1r3dv
 github.com/kelseyhightower/envconfig v1.4.0/go.mod h1:cccZRl6mQpaq41TPp5QxidR+Sa3axMbJDNb//FQX6Gg=
 github.com/klauspost/compress v1.18.4 h1:RPhnKRAQ4Fh8zU2FY/6ZFDwTVTxgJ/EMydqSTzE9a2c=
 github.com/klauspost/compress v1.18.4/go.mod h1:R0h/fSBs8DE4ENlcrlib3PsXS61voFxhIs2DeRhCvJ4=
-github.com/konflux-ci/coverport/instrumentation/go v0.0.0-20260511122848-7619cbd17392 h1:pAAHdo/2UaGFtpgwNJmg1Kp3nLpDL0wzCOUTya9wBhE=
-github.com/konflux-ci/coverport/instrumentation/go v0.0.0-20260511122848-7619cbd17392/go.mod h1:WVMHU9A2464s/vjH1xOTm4LJDD4xP+VlEiU+KM0gkSU=
+github.com/konflux-ci/coverport/instrumentation/go v0.0.0-20260716142834-0e0cf75be216 h1:CnkF4TI411322qe18I9W1HZKuxL8O+sFtyGOvBr8ndE=
+github.com/konflux-ci/coverport/instrumentation/go v0.0.0-20260716142834-0e0cf75be216/go.mod h1:i6BCROSU0M/Fk4QhzBbnY4R6JVq0hU7jlUSSxjd8dD4=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
