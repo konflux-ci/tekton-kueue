@@ -1,0 +1,487 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: tekton-kueue-release
+spec:
+  params:
+    - name: package
+      description: package to release
+      default: github.com/tektoncd/tekton-kueue
+    - name: repoName
+      description: repository name
+      default: tekton-kueue
+    - name: gitRevision
+      description: the git revision to release
+    - name: imageRegistry
+      description: The target image registry
+      default: ghcr.io
+    - name: imageRegistryPath
+      description: The path in the image registry
+      default: tektoncd/tekton-kueue
+    - name: imageRegistryUser
+      description: The user for the image registry credentials
+      default: tekton-robot
+    - name: versionTag
+      description: Version tag in vX.Y.Z form
+    - name: releaseBucket
+      description: bucket where the release is stored
+      default: tekton-releases
+    - name: releaseAsLatest
+      description: Whether to tag and publish this release as latest
+      default: "false"
+    - name: platforms
+      description: Linux platforms to publish
+      default: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
+    - name: serviceAccountImagesPath
+      description: The path to the service account file or credentials within the release-images-secret workspace
+    - name: runTests
+      description: If set to something other than "true", skip the build and test tasks
+      default: "true"
+    - name: previousReleaseTag
+      description: Previous release tag for changelog generation (e.g. v0.3.0). If empty, auto-detected from git tags.
+      default: ""
+    - name: releaseName
+      description: Release name (e.g. "Swallow Sparrow"). If empty, uses version tag.
+      default: ""
+  workspaces:
+    - name: workarea
+      description: The workspace where the repo will be cloned.
+    - name: release-secret
+      description: The secret that contains auth credentials to push to the output bucket
+    - name: release-images-secret
+      description: The secret that contains a service account authorized to push to the imageRegistry
+    - name: github-secret
+      description: |
+        The secret containing GITHUB_TOKEN for creating draft releases.
+        When not bound, the draft-release tasks (wait-for-chains, prepare-draft-release,
+        create-draft-release) are skipped and the draft must be created manually
+        following the cheat sheet instructions.
+      optional: true
+  results:
+    - name: commit-sha
+      description: the sha of the commit that was released
+      value: $(tasks.git-clone.results.commit)
+    - name: release-file
+      description: the URL of the release file
+      value: $(tasks.report-bucket.results.release)
+    - name: release-file-no-tag
+      description: the URL of the release file
+      value: $(tasks.report-bucket.results.release-no-tag)
+  tasks:
+    - name: git-clone
+      taskRef:
+        resolver: bundles
+        params:
+          - name: bundle
+            value: ghcr.io/tektoncd/catalog/upstream/tasks/git-clone@sha256:31bb51c505bab692f979093433c6889fbe8a1c25135b4bd47dac4fc0bfab2022
+          - name: name
+            value: git-clone
+          - name: kind
+            value: task
+      workspaces:
+        - name: output
+          workspace: workarea
+          subPath: git
+      params:
+        - name: url
+          value: https://$(params.package)
+        - name: revision
+          value: $(params.gitRevision)
+
+    - name: precheck
+      runAfter: [git-clone]
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/tektoncd/plumbing
+          - name: revision
+            value: 0dc3174db86dcfa70724eced275ba4c1b2e25e76
+          - name: pathInRepo
+            value: tekton/resources/release/base/prerelease_checks_oci.yaml
+      params:
+        - name: package
+          value: $(params.package)
+        - name: versionTag
+          value: $(params.versionTag)
+        - name: releaseBucket
+          value: $(params.releaseBucket)
+      workspaces:
+        - name: source-to-release
+          workspace: workarea
+          subPath: git
+        - name: oci-credentials
+          workspace: release-secret
+
+    - name: verify-source
+      runAfter: [precheck]
+      when:
+        - input: $(params.runTests)
+          operator: in
+          values: ["true"]
+      taskSpec:
+        workspaces:
+          - name: source
+        steps:
+          - name: test-and-build
+            image: docker.io/library/golang:1.26.4@sha256:f96cc555eb8db430159a3aa6797cd5bae561945b7b0fe7d0e284c63a3b291609
+            workingDir: $(workspaces.source.path)
+            script: |
+              #!/bin/sh
+              set -eu
+              make test
+              git diff --exit-code
+              go build -o /tmp/tekton-kueue ./cmd/
+      workspaces:
+        - name: source
+          workspace: workarea
+          subPath: git
+
+    - name: publish-images
+      runAfter: [verify-source]
+      taskRef:
+        resolver: git
+        params:
+          - name: repo
+            value: tekton-kueue
+          - name: org
+            value: tektoncd
+          - name: revision
+            value: $(params.gitRevision)
+          - name: pathInRepo
+            value: tekton/publish.yaml
+      params:
+        - name: package
+          value: $(params.package)
+        - name: versionTag
+          value: $(params.versionTag)
+        - name: imageRegistry
+          value: $(params.imageRegistry)
+        - name: imageRegistryPath
+          value: $(params.imageRegistryPath)
+        - name: imageRegistryUser
+          value: $(params.imageRegistryUser)
+        - name: releaseAsLatest
+          value: $(params.releaseAsLatest)
+        - name: serviceAccountPath
+          value: $(params.serviceAccountImagesPath)
+        - name: platforms
+          value: $(params.platforms)
+      workspaces:
+        - name: source
+          workspace: workarea
+          subPath: git
+        - name: output
+          workspace: workarea
+          subPath: bucket
+        - name: release-secret
+          workspace: release-images-secret
+      timeout: 3h
+
+    - name: publish-to-bucket
+      runAfter: [publish-images]
+      taskRef:
+        resolver: bundles
+        params:
+          - name: bundle
+            value: ghcr.io/tektoncd/catalog/upstream/tasks/oracle-cloud-storage-upload@sha256:f1dd28da10dfb72ebbb3a5258e9f1ba6bfe82ee587311d708a7be3207f69e5e6
+          - name: name
+            value: oracle-cloud-storage-upload
+          - name: kind
+            value: task
+      workspaces:
+        - name: credentials
+          workspace: release-secret
+        - name: source
+          workspace: workarea
+          subPath: bucket
+      params:
+        - name: path
+          value: $(params.versionTag)
+        - name: bucketName
+          value: $(params.releaseBucket)
+        - name: objectPrefix
+          value: $(params.repoName)/previous/$(params.versionTag)/
+        - name: replaceExistingFiles
+          value: "true"
+        - name: recursive
+          value: "true"
+
+    - name: publish-to-bucket-latest
+      runAfter: [publish-images]
+      when:
+        - input: "$(params.releaseAsLatest)"
+          operator: in
+          values: ["true"]
+      taskRef:
+        resolver: bundles
+        params:
+          - name: bundle
+            value: ghcr.io/tektoncd/catalog/upstream/tasks/oracle-cloud-storage-upload@sha256:f1dd28da10dfb72ebbb3a5258e9f1ba6bfe82ee587311d708a7be3207f69e5e6
+          - name: name
+            value: oracle-cloud-storage-upload
+          - name: kind
+            value: task
+      workspaces:
+        - name: credentials
+          workspace: release-secret
+        - name: source
+          workspace: workarea
+          subPath: bucket
+      params:
+        - name: path
+          value: $(params.versionTag)
+        - name: bucketName
+          value: $(params.releaseBucket)
+        - name: objectPrefix
+          value: $(params.repoName)/latest/
+        - name: replaceExistingFiles
+          value: "true"
+        - name: recursive
+          value: "true"
+        - name: deleteExtraFiles
+          value: "true"
+
+    - name: report-bucket
+      runAfter: [publish-to-bucket]
+      params:
+        - name: releaseBucket
+          value: $(params.releaseBucket)
+        - name: versionTag
+          value: $(params.versionTag)
+        - name: repoName
+          value: $(params.repoName)
+      taskSpec:
+        params:
+          - name: releaseBucket
+          - name: versionTag
+          - name: repoName
+        results:
+          - name: release
+            description: The full URL of the release file in the bucket
+          - name: release-no-tag
+            description: The full URL of the release file (no tag) in the bucket
+        steps:
+          - name: create-results
+            image: docker.io/library/alpine:3.20.3@sha256:beefdbd8a1da6d2915566fde36db9db0b524eb737fc57cd1367effd16dc0d06d
+            env:
+              - name: RELEASE_BUCKET
+                value: $(params.releaseBucket)
+              - name: VERSION_TAG
+                value: $(params.versionTag)
+              - name: REPO_NAME
+                value: $(params.repoName)
+            script: |
+              # Oracle Cloud Storage: Construct public URL
+              # Format: https://infra.tekton.dev/<releaseBucket>/<repoName>/previous/<versionTag>
+              BASE_URL="https://infra.tekton.dev/${RELEASE_BUCKET}/${REPO_NAME}/previous/${VERSION_TAG}"
+
+              echo "${BASE_URL}/release.yaml" > $(results.release.path)
+              echo "${BASE_URL}/release.notags.yaml" > $(results.release-no-tag.path)
+
+    - name: wait-for-chains
+      runAfter: [publish-images]
+      timeout: "30m"
+      when:
+        - input: "$(workspaces.github-secret.bound)"
+          operator: in
+          values: ["true"]
+      params:
+        - name: pipelineRunName
+          value: $(context.pipelineRun.name)
+        - name: namespace
+          value: $(context.pipelineRun.namespace)
+      taskSpec:
+        params:
+          - name: pipelineRunName
+          - name: namespace
+        results:
+          - name: rekor-uuid
+            description: Rekor UUID (64-char hex) derived from the Chains transparency log URL
+          - name: signed
+            description: Whether Chains signing succeeded (true, failed, or timeout)
+        steps:
+          - name: wait-and-extract
+            image: docker.io/alpine/k8s:1.32.2@sha256:15cfdf84d6de3559bc54d7479eb4e8aadbf71f6d7f08782cb1e91f3446f4b2d8
+            script: |
+              #!/bin/sh
+              set -e
+
+              NAMESPACE="$(params.namespace)"
+              PIPELINERUN="$(params.pipelineRunName)"
+
+              echo "Looking for publish-images TaskRun in PipelineRun ${PIPELINERUN}..."
+              TASKRUN_NAME=""
+              MAX_FIND_ATTEMPTS=10
+              FIND_ATTEMPT=0
+              while [ -z "${TASKRUN_NAME}" ] && [ $FIND_ATTEMPT -lt $MAX_FIND_ATTEMPTS ]; do
+                TASKRUN_NAME=$(kubectl get taskrun -n "${NAMESPACE}" \
+                  -l tekton.dev/pipelineRun="${PIPELINERUN}",tekton.dev/pipelineTask=publish-images \
+                  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+                if [ -z "${TASKRUN_NAME}" ]; then
+                  FIND_ATTEMPT=$((FIND_ATTEMPT + 1))
+                  echo "  Attempt ${FIND_ATTEMPT}/${MAX_FIND_ATTEMPTS} - TaskRun not found yet..."
+                  sleep 10
+                fi
+              done
+
+              if [ -z "${TASKRUN_NAME}" ]; then
+                echo "ERROR: Could not find publish-images TaskRun"
+                printf 'unknown' > "$(results.rekor-uuid.path)"
+                printf 'error' > "$(results.signed.path)"
+                exit 0
+              fi
+
+              echo "Found TaskRun: ${TASKRUN_NAME}"
+              echo "Waiting for Chains to sign TaskRun ${TASKRUN_NAME}..."
+
+              MAX_ATTEMPTS=60
+              ATTEMPT=0
+              while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+                SIGNED=$(kubectl get taskrun "${TASKRUN_NAME}" -n "${NAMESPACE}" \
+                  -o jsonpath='{.metadata.annotations.chains\.tekton\.dev/signed}' 2>/dev/null || echo "")
+
+                if [ "${SIGNED}" = "true" ] || [ "${SIGNED}" = "failed" ]; then
+                  echo "Chains signing status: ${SIGNED}"
+                  printf '%s' "${SIGNED}" > "$(results.signed.path)"
+
+                  TRANSPARENCY=$(kubectl get taskrun "${TASKRUN_NAME}" -n "${NAMESPACE}" \
+                    -o jsonpath='{.metadata.annotations.chains\.tekton\.dev/transparency}' 2>/dev/null || echo "")
+
+                  if [ -n "${TRANSPARENCY}" ]; then
+                    echo "Transparency URL: ${TRANSPARENCY}"
+                    REKOR_UUID=$(curl -s "${TRANSPARENCY}" | jq -r 'keys[0]')
+                    if [ -z "${REKOR_UUID}" ] || [ "${REKOR_UUID}" = "null" ]; then
+                      echo "WARNING: Could not extract UUID from transparency URL, falling back to URL"
+                      REKOR_UUID="${TRANSPARENCY}"
+                    fi
+                    echo "Rekor UUID: ${REKOR_UUID}"
+                    printf '%s' "${REKOR_UUID}" > "$(results.rekor-uuid.path)"
+                  else
+                    echo "WARNING: No transparency URL found"
+                    printf 'unknown' > "$(results.rekor-uuid.path)"
+                  fi
+                  exit 0
+                fi
+
+                ATTEMPT=$((ATTEMPT + 1))
+                echo "  Attempt ${ATTEMPT}/${MAX_ATTEMPTS} - signing status: '${SIGNED}'"
+                sleep 30
+              done
+
+              echo "WARNING: Timed out waiting for Chains to sign"
+              printf 'timeout' > "$(results.signed.path)"
+              printf 'unknown' > "$(results.rekor-uuid.path)"
+              exit 0
+
+    - name: prepare-draft-release
+      runAfter: [publish-to-bucket]
+      when:
+        - input: "$(workspaces.github-secret.bound)"
+          operator: in
+          values: ["true"]
+      params:
+        - name: package
+          value: $(params.package)
+        - name: versionTag
+          value: $(params.versionTag)
+        - name: previousReleaseTag
+          value: $(params.previousReleaseTag)
+        - name: releaseName
+          value: $(params.releaseName)
+      workspaces:
+        - name: workarea
+          workspace: workarea
+      taskSpec:
+        params:
+          - name: package
+          - name: versionTag
+          - name: previousReleaseTag
+          - name: releaseName
+        results:
+          - name: package
+            description: The package in org/repo format (without github.com/ prefix)
+          - name: previous-tag
+            description: The previous release tag
+          - name: release-name
+            description: The release name to use
+        workspaces:
+          - name: workarea
+        steps:
+          - name: setup
+            image: docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+            script: |
+              #!/bin/sh
+              set -e
+              apk add --no-cache git > /dev/null 2>&1
+
+              WORKAREA="$(workspaces.workarea.path)"
+              VERSION="$(params.versionTag)"
+              PREVIOUS="$(params.previousReleaseTag)"
+              NAME="$(params.releaseName)"
+
+              PACKAGE=$(echo "$(params.package)" | sed 's|^github\.com/||')
+              printf '%s' "${PACKAGE}" > "$(results.package.path)"
+              echo "Package: ${PACKAGE}"
+
+              if [ -z "${PREVIOUS}" ]; then
+                git config --global --add safe.directory "${WORKAREA}/git"
+                git -C "${WORKAREA}/git" fetch --tags
+                PREVIOUS=$(git -C "${WORKAREA}/git" tag --sort=-v:refname | grep '^v[0-9]' | while read tag; do
+                  if [ "$(printf '%s\n%s' "$tag" "$VERSION" | sort -V | head -1)" = "$tag" ] && [ "$tag" != "$VERSION" ]; then
+                    echo "$tag"
+                    break
+                  fi
+                done)
+                if [ -z "${PREVIOUS}" ]; then
+                  echo "WARNING: Could not auto-detect previous tag"
+                  PREVIOUS="unknown"
+                fi
+                echo "Auto-detected previous tag: ${PREVIOUS}"
+              fi
+              printf '%s' "${PREVIOUS}" > "$(results.previous-tag.path)"
+
+              if [ -z "${NAME}" ]; then
+                NAME="Release ${VERSION}"
+              fi
+              printf '%s' "${NAME}" > "$(results.release-name.path)"
+
+    - name: create-draft-release
+      runAfter: [prepare-draft-release, wait-for-chains]
+      when:
+        - input: "$(workspaces.github-secret.bound)"
+          operator: in
+          values: ["true"]
+        - input: "$(tasks.wait-for-chains.results.signed)"
+          operator: in
+          values: ["true"]
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/tektoncd/plumbing
+          - name: revision
+            value: 7abffd25eb2e578e6698a9ff13470d04906f79e6
+          - name: pathInRepo
+            value: tekton/resources/release/base/github_release_oci.yaml
+      params:
+        - name: package
+          value: $(tasks.prepare-draft-release.results.package)
+        - name: git-revision
+          value: $(params.gitRevision)
+        - name: release-name
+          value: $(tasks.prepare-draft-release.results.release-name)
+        - name: release-tag
+          value: $(params.versionTag)
+        - name: previous-release-tag
+          value: $(tasks.prepare-draft-release.results.previous-tag)
+        - name: rekor-uuid
+          value: $(tasks.wait-for-chains.results.rekor-uuid)
+        - name: source-subpath
+          value: git
+        - name: release-subpath
+          value: bucket/$(params.versionTag)
+      workspaces:
+        - name: shared
+          workspace: workarea
