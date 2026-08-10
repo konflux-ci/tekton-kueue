@@ -42,7 +42,7 @@ make tekton
 **Deploy the Manager to the cluster with the image specified by `IMG`:**
 
 ```sh
-make deploy IMG=quay.io/konflux-ci/tekton-kueue:latest
+make deploy IMG=ghcr.io/tektoncd/tekton-kueue:latest
 ```
 
 ### To Uninstall
@@ -474,7 +474,7 @@ In addition, the tekton-kueue webhook server exposes custom Prometheus metrics f
 
 ## Project Distribution
 
-The project is built by [Konflux]. Images are published to [quay.io/konflux-ci/tekton-queue](quay.io/konflux-ci/tekton-queue)
+Release images are published to [ghcr.io/tektoncd/tekton-kueue](https://github.com/tektoncd/tekton-kueue/pkgs/container/tekton-kueue).
 
 ## Contributing
 
@@ -485,7 +485,6 @@ More information can be found via the [Kubebuilder Documentation](https://book.k
 
 [Tekton]: <https://tekton.dev/> "Tekton"
 [Kueue]: <https://kueue.sigs.k8s.io/> "Kueue"
-[Konflux]: <https://konflux-ci.dev/> "Konflux"
 [ResourceFlavor]: <https://kueue.sigs.k8s.io/docs/concepts/resource_flavor/> "ResourceFlavor"
 [ClusterQueue]: <https://kueue.sigs.k8s.io/docs/concepts/cluster_queue/> "ClusterQueue"
 [LocalQueue]: <https://kueue.sigs.k8s.io/docs/concepts/local_queue/> "LocalQueue"
