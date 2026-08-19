@@ -42,7 +42,7 @@ spec:
       description: Previous release tag for changelog generation (e.g. v0.3.0). If empty, auto-detected from git tags.
       default: ""
     - name: releaseName
-      description: Release name (e.g. "Swallow Sparrow"). If empty, uses version tag.
+      description: Optional release name appended to the versioned GitHub release title.
       default: ""
   workspaces:
     - name: workarea
@@ -106,7 +106,7 @@ spec:
         - name: versionTag
           value: $(params.versionTag)
         - name: releaseBucket
-          value: $(params.releaseBucket)
+          value: $(params.releaseBucket)/$(params.repoName)
       workspaces:
         - name: source-to-release
           workspace: workarea
@@ -298,24 +298,26 @@ spec:
           - name: namespace
         results:
           - name: rekor-uuid
-            description: Rekor UUID (64-char hex) derived from the Chains transparency log URL
+            description: Rekor UUID for the in-toto attestation covering the published image
           - name: signed
             description: Whether Chains signing succeeded (true, failed, or timeout)
         steps:
           - name: wait-and-extract
             image: docker.io/alpine/k8s:1.32.2@sha256:15cfdf84d6de3559bc54d7479eb4e8aadbf71f6d7f08782cb1e91f3446f4b2d8
+            env:
+              - name: NAMESPACE
+                value: $(params.namespace)
+              - name: PIPELINERUN
+                value: $(params.pipelineRunName)
             script: |
               #!/bin/sh
               set -e
-
-              NAMESPACE="$(params.namespace)"
-              PIPELINERUN="$(params.pipelineRunName)"
 
               echo "Looking for publish-images TaskRun in PipelineRun ${PIPELINERUN}..."
               TASKRUN_NAME=""
               MAX_FIND_ATTEMPTS=10
               FIND_ATTEMPT=0
-              while [ -z "${TASKRUN_NAME}" ] && [ $FIND_ATTEMPT -lt $MAX_FIND_ATTEMPTS ]; do
+              while [ -z "${TASKRUN_NAME}" ] && [ "$FIND_ATTEMPT" -lt "$MAX_FIND_ATTEMPTS" ]; do
                 TASKRUN_NAME=$(kubectl get taskrun -n "${NAMESPACE}" \
                   -l tekton.dev/pipelineRun="${PIPELINERUN}",tekton.dev/pipelineTask=publish-images \
                   -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
@@ -338,7 +340,7 @@ spec:
 
               MAX_ATTEMPTS=60
               ATTEMPT=0
-              while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+              while [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; do
                 SIGNED=$(kubectl get taskrun "${TASKRUN_NAME}" -n "${NAMESPACE}" \
                   -o jsonpath='{.metadata.annotations.chains\.tekton\.dev/signed}' 2>/dev/null || echo "")
 
@@ -346,27 +348,52 @@ spec:
                   echo "Chains signing status: ${SIGNED}"
                   printf '%s' "${SIGNED}" > "$(results.signed.path)"
 
-                  TRANSPARENCY=$(kubectl get taskrun "${TASKRUN_NAME}" -n "${NAMESPACE}" \
-                    -o jsonpath='{.metadata.annotations.chains\.tekton\.dev/transparency}' 2>/dev/null || echo "")
+                  # The transparency annotation points to a per-image signature
+                  # (hashedrekord), but release verification needs the in-toto
+                  # attestation that lists the published image as a subject.
+                  REKOR_HOST="https://rekor.sigstore.dev"
+                  REKOR_UUID=""
+                  IMAGES=$(kubectl get taskrun "${TASKRUN_NAME}" -n "${NAMESPACE}" \
+                    -o jsonpath='{.status.results[?(@.name=="IMAGES")].value}' 2>/dev/null || echo "")
+                  IMAGE_DIGEST=$(echo "${IMAGES}" | grep -oE 'sha256:[0-9a-f]{64}' | head -1)
 
-                  if [ -n "${TRANSPARENCY}" ]; then
-                    echo "Transparency URL: ${TRANSPARENCY}"
-                    REKOR_UUID=$(curl -s "${TRANSPARENCY}" | jq -r 'keys[0]')
-                    if [ -z "${REKOR_UUID}" ] || [ "${REKOR_UUID}" = "null" ]; then
-                      echo "WARNING: Could not extract UUID from transparency URL, falling back to URL"
-                      REKOR_UUID="${TRANSPARENCY}"
-                    fi
-                    echo "Rekor UUID: ${REKOR_UUID}"
-                    printf '%s' "${REKOR_UUID}" > "$(results.rekor-uuid.path)"
-                  else
-                    echo "WARNING: No transparency URL found"
-                    printf 'unknown' > "$(results.rekor-uuid.path)"
+                  if [ -n "${IMAGE_DIGEST}" ]; then
+                    echo "Searching Rekor for the in-toto attestation of ${IMAGE_DIGEST}..."
+                    CANDIDATES=$(curl -fsS -H 'Content-Type: application/json' \
+                      -d "{\"hash\":\"${IMAGE_DIGEST}\"}" \
+                      "${REKOR_HOST}/api/v1/index/retrieve" | jq -r '.[]?' || true)
+                    for uuid in ${CANDIDATES}; do
+                      KIND=$(curl -fsS "${REKOR_HOST}/api/v1/log/entries/${uuid}" \
+                        | jq -r '.[].body' | base64 -d 2>/dev/null | jq -r '.kind' 2>/dev/null || true)
+                      if [ "${KIND}" = "intoto" ]; then
+                        REKOR_UUID="${uuid}"
+                        break
+                      fi
+                    done
                   fi
+
+                  if [ -z "${REKOR_UUID}" ]; then
+                    echo "WARNING: Could not find an in-toto attestation entry; falling back to the transparency annotation"
+                    TRANSPARENCY=$(kubectl get taskrun "${TASKRUN_NAME}" -n "${NAMESPACE}" \
+                      -o jsonpath='{.metadata.annotations.chains\.tekton\.dev/transparency}' 2>/dev/null || echo "")
+                    if [ -n "${TRANSPARENCY}" ]; then
+                      REKOR_UUID=$(curl -fsS "${TRANSPARENCY}" | jq -r 'keys[0] // empty' || true)
+                      if [ -z "${REKOR_UUID}" ]; then
+                        REKOR_UUID=$(echo "${TRANSPARENCY}" | grep -oE 'logIndex=[0-9]+' | cut -d= -f2)
+                      fi
+                    fi
+                  fi
+
+                  if [ -z "${REKOR_UUID}" ]; then
+                    REKOR_UUID="unknown"
+                  fi
+                  echo "Rekor UUID: ${REKOR_UUID}"
+                  printf '%s' "${REKOR_UUID}" > "$(results.rekor-uuid.path)"
                   exit 0
                 fi
 
                 ATTEMPT=$((ATTEMPT + 1))
-                echo "  Attempt ${ATTEMPT}/${MAX_ATTEMPTS} - signing status: '${SIGNED}'"
+                echo "  Attempt ${ATTEMPT}/${MAX_ATTEMPTS} - signing status: '${SIGNED:-pending}'"
                 sleep 30
               done
 
@@ -411,17 +438,22 @@ spec:
         steps:
           - name: setup
             image: docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+            env:
+              - name: NAME
+                value: $(params.releaseName)
+              - name: PACKAGE_PARAM
+                value: $(params.package)
+              - name: PREVIOUS
+                value: $(params.previousReleaseTag)
+              - name: VERSION
+                value: $(params.versionTag)
             script: |
               #!/bin/sh
               set -e
               apk add --no-cache git > /dev/null 2>&1
 
               WORKAREA="$(workspaces.workarea.path)"
-              VERSION="$(params.versionTag)"
-              PREVIOUS="$(params.previousReleaseTag)"
-              NAME="$(params.releaseName)"
-
-              PACKAGE=$(echo "$(params.package)" | sed 's|^github\.com/||')
+              PACKAGE=$(echo "$PACKAGE_PARAM" | sed 's|^github\.com/||')
               printf '%s' "${PACKAGE}" > "$(results.package.path)"
               echo "Package: ${PACKAGE}"
 
@@ -442,9 +474,6 @@ spec:
               fi
               printf '%s' "${PREVIOUS}" > "$(results.previous-tag.path)"
 
-              if [ -z "${NAME}" ]; then
-                NAME="Release ${VERSION}"
-              fi
               printf '%s' "${NAME}" > "$(results.release-name.path)"
 
     - name: create-draft-release
@@ -462,7 +491,7 @@ spec:
           - name: url
             value: https://github.com/tektoncd/plumbing
           - name: revision
-            value: 7abffd25eb2e578e6698a9ff13470d04906f79e6
+            value: 894710e292fcb6b17276af01a2bc318107eef8a7
           - name: pathInRepo
             value: tekton/resources/release/base/github_release_oci.yaml
       params:
@@ -478,6 +507,8 @@ spec:
           value: $(tasks.prepare-draft-release.results.previous-tag)
         - name: rekor-uuid
           value: $(tasks.wait-for-chains.results.rekor-uuid)
+        - name: draft
+          value: "true"
         - name: source-subpath
           value: git
         - name: release-subpath

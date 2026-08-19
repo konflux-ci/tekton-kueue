@@ -25,6 +25,7 @@ permissions:
 env:
   PAC_CONTROLLER_URL: https://pac.infra.tekton.dev
   PAC_REPOSITORY_NAME: tektoncd-tekton-kueue
+  # v0.5 is the first release line managed by this automation.
   MIN_RELEASE_VERSION: "0.5"
 
 jobs:
@@ -117,19 +118,23 @@ jobs:
     - name: Trigger Pipelines as Code
       env:
         PAC_INCOMING_SECRET: ${{ secrets.PAC_INCOMING_SECRET }}
+        RELEASE_BRANCH: ${{ matrix.release.branch }}
+        RELEASE_VERSION: ${{ matrix.release.version }}
+        RELEASE_AS_LATEST: ${{ matrix.release.release_as_latest }}
       run: |
-        curl -sf -X POST "${PAC_CONTROLLER_URL}/incoming" \
+        jq -n '{
+          repository: env.PAC_REPOSITORY_NAME,
+          branch: env.RELEASE_BRANCH,
+          pipelinerun: "release-patch",
+          secret: env.PAC_INCOMING_SECRET,
+          params: {
+            version: env.RELEASE_VERSION,
+            release_as_latest: env.RELEASE_AS_LATEST
+          }
+        }' | curl --fail-with-body --silent --show-error \
           -H "Content-Type: application/json" \
-          -d '{
-            "repository": "'"${PAC_REPOSITORY_NAME}"'",
-            "branch": "${{ matrix.release.branch }}",
-            "pipelinerun": "release-patch",
-            "secret": "'"${PAC_INCOMING_SECRET}"'",
-            "params": {
-              "version": "${{ matrix.release.version }}",
-              "release_as_latest": "${{ matrix.release.release_as_latest }}"
-            }
-          }'
+          --data-binary @- \
+          "${PAC_CONTROLLER_URL}/incoming"
 
   trigger-manual-release:
     name: "Trigger ${{ inputs.version }} (${{ inputs.branch }})"
@@ -161,19 +166,20 @@ jobs:
     - name: Trigger Pipelines as Code
       env:
         PAC_INCOMING_SECRET: ${{ secrets.PAC_INCOMING_SECRET }}
-        BRANCH: ${{ inputs.branch }}
-        VERSION: ${{ inputs.version }}
+        RELEASE_BRANCH: ${{ inputs.branch }}
+        RELEASE_VERSION: ${{ inputs.version }}
         RELEASE_AS_LATEST: ${{ inputs.release_as_latest }}
       run: |
-        curl -sf -X POST "${PAC_CONTROLLER_URL}/incoming" \
+        jq -n '{
+          repository: env.PAC_REPOSITORY_NAME,
+          branch: env.RELEASE_BRANCH,
+          pipelinerun: "release-patch",
+          secret: env.PAC_INCOMING_SECRET,
+          params: {
+            version: env.RELEASE_VERSION,
+            release_as_latest: env.RELEASE_AS_LATEST
+          }
+        }' | curl --fail-with-body --silent --show-error \
           -H "Content-Type: application/json" \
-          -d '{
-            "repository": "'"${PAC_REPOSITORY_NAME}"'",
-            "branch": "'"${BRANCH}"'",
-            "pipelinerun": "release-patch",
-            "secret": "'"${PAC_INCOMING_SECRET}"'",
-            "params": {
-              "version": "'"${VERSION}"'",
-              "release_as_latest": "'"${RELEASE_AS_LATEST}"'"
-            }
-          }'
+          --data-binary @- \
+          "${PAC_CONTROLLER_URL}/incoming"

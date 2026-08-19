@@ -54,8 +54,18 @@ spec:
       value: $(params.imageRegistry)/$(params.imageRegistryPath)
     - name: CONTAINER_REGISTRY_USER
       value: $(params.imageRegistryUser)
-    - name: OUTPUT_RELEASE_DIR
-      value: $(workspaces.output.path)/$(params.versionTag)
+    - name: IMAGE_REGISTRY
+      value: $(params.imageRegistry)
+    - name: OUTPUT_ROOT
+      value: $(workspaces.output.path)
+    - name: PACKAGE
+      value: $(params.package)
+    - name: PLATFORMS
+      value: $(params.platforms)
+    - name: RELEASE_AS_LATEST
+      value: $(params.releaseAsLatest)
+    - name: VERSION_TAG
+      value: $(params.versionTag)
   results:
   - name: IMAGES
     description: Digest-qualified images for Tekton Chains
@@ -67,7 +77,7 @@ spec:
       set -eu
 
       docker_config=$(cat "$CONTAINER_REGISTRY_CREDENTIALS" | \
-        crane auth login -u "$CONTAINER_REGISTRY_USER" --password-stdin "$(params.imageRegistry)" 2>&1 | \
+        crane auth login -u "$CONTAINER_REGISTRY_USER" --password-stdin "$IMAGE_REGISTRY" 2>&1 | \
         sed -n 's,^.*logged in via \(.*\)$,\1,p')
       cp "$docker_config" /workspace/docker-config.json
 
@@ -80,6 +90,16 @@ spec:
       #!/usr/bin/env sh
       set -eu
 
+      printf '%s\n' "$VERSION_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || {
+        echo "invalid release version: $VERSION_TAG" >&2
+        exit 1
+      }
+      case "$RELEASE_AS_LATEST" in
+        true|false) ;;
+        *) echo "releaseAsLatest must be true or false" >&2; exit 1 ;;
+      esac
+
+      OUTPUT_RELEASE_DIR="$OUTPUT_ROOT/$VERSION_TAG"
       git config --global --add safe.directory "$PROJECT_ROOT"
       mkdir -p "$HOME/.docker" "$OUTPUT_RELEASE_DIR/template"
       cp /workspace/docker-config.json "$HOME/.docker/config.json"
@@ -89,17 +109,17 @@ spec:
         KUSTOMIZE=/go/bin/kustomize \
         RELEASE_DIR="$OUTPUT_RELEASE_DIR/template" \
         RELEASE_IMAGE=ko://github.com/konflux-ci/tekton-kueue/cmd \
-        VERSION="$(params.versionTag)"
+        VERSION="$VERSION_TAG"
 
-      template="$OUTPUT_RELEASE_DIR/template/release-$(params.versionTag).yaml"
+      template="$OUTPUT_RELEASE_DIR/template/release-$VERSION_TAG.yaml"
       ko resolve \
         --bare \
-        --image-label=org.opencontainers.image.source=https://$(params.package) \
-        --platform="$(params.platforms)" \
-        -t "$(params.versionTag)" \
+        --image-label="org.opencontainers.image.source=https://$PACKAGE" \
+        --platform="$PLATFORMS" \
+        -t "$VERSION_TAG" \
         -f "$template" > "$OUTPUT_RELEASE_DIR/release.yaml"
 
-      sed "s#:$(params.versionTag)@#@#g" \
+      sed "s#:$VERSION_TAG@#@#g" \
         "$OUTPUT_RELEASE_DIR/release.yaml" > "$OUTPUT_RELEASE_DIR/release.notags.yaml"
       rm -rf "$OUTPUT_RELEASE_DIR/template"
 
@@ -123,7 +143,7 @@ spec:
       #!/bin/sh
       set -eu
 
-      [ "$(params.releaseAsLatest)" = "true" ] || exit 0
+      [ "$RELEASE_AS_LATEST" = "true" ] || exit 0
       mkdir -p "$HOME/.docker"
       cp /workspace/docker-config.json "$HOME/.docker/config.json"
       image=$(cat /workspace/built-images)
