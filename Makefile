@@ -148,7 +148,8 @@ verify-release: kustomize
 	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
 	image=ghcr.io/tektoncd/tekton-kueue:v0.0.0-test@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; \
 	$(MAKE) --no-print-directory release RELEASE_DIR="$$tmp" VERSION=v0.0.0-test RELEASE_IMAGE="$$image"; \
-	test "$$(grep -c "image: $$image" "$$tmp/release-v0.0.0-test.yaml")" -eq 2; \
+	matches=$$(grep -Fc "image: $$image" "$$tmp/release-v0.0.0-test.yaml"); \
+	test "$$matches" -eq 2; \
 	! grep -Eq 'quay.io|konflux-ci/tekton-kueue' "$$tmp/release-v0.0.0-test.yaml"
 
 ##@ Deployment
@@ -203,7 +204,7 @@ CERT_MANAGER_VERSION ?= v1.19.2
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
-$(KUSTOMIZE): $(LOCALBIN)
+$(KUSTOMIZE): | $(LOCALBIN)
 	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 
 .PHONY: controller-gen

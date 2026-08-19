@@ -54,7 +54,7 @@ spec:
   - name: previousReleaseTag
     value: ""
   - name: releaseName
-    value: Tekton Kueue
+    value: ""
   timeouts:
     pipeline: 3h
   workspaces:
