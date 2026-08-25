@@ -1,18 +1,40 @@
 aliases:
-    konflux-infra-team:
-        - celeztyne
-        - enkeefe00
-        - eisraeli
-        - filariow
-        - gcpsoares
-        - gbenhaim
-        - glevi-rh
-        - hugares
-        - ilaydamari
-        - manish-jangra
-        - meyrevived
-        - mshaposhnik
-        - oswcab
-        - sadlerap
-        - vsokolen-redhat
-        - wbrefvem
+  tekton-kueue-maintainers:
+  - celeztyne
+  - eisraeli
+  - enkeefe00
+  - filariow
+  - gbenhaim
+  - gcpsoares
+  - glevi-rh
+  - hugares
+  - ilaydamari
+  - khrm
+  - manish-jangra
+  - meyrevived
+  - mshaposhnik
+  - oswcab
+  - sadlerap
+  - vsokolen-redhat
+  - waveywaves
+  - wbrefvem
+
+  tekton-kueue-collaborators:
+  - celeztyne
+  - eisraeli
+  - enkeefe00
+  - filariow
+  - gbenhaim
+  - gcpsoares
+  - glevi-rh
+  - hugares
+  - ilaydamari
+  - khrm
+  - manish-jangra
+  - meyrevived
+  - mshaposhnik
+  - oswcab
+  - sadlerap
+  - vsokolen-redhat
+  - waveywaves
+  - wbrefvem
