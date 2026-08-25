@@ -9,10 +9,11 @@ The controller enables [Kueue] to manage the scheduling of [Tekton] PipelineRuns
 ## Getting Started
 
 ### Prerequisites
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
-- make
-- Get familiar with [basic Kueue concept](https://kueue.sigs.k8s.io/docs/concepts/)
+
+- A Kubernetes cluster and a compatible version of `kubectl`.
+- `make`.
+- Familiarity with [basic Kueue concepts](https://kueue.sigs.k8s.io/docs/concepts/).
+- For development, use the component versions declared in [`go.mod`](go.mod).
 
 ### To Deploy on the cluster
 
@@ -26,8 +27,8 @@ make cert-manager
 
 **Install Kueue:**
 
-The controller currently supports kueue v0.10.x
-If you already have kueue installed, make sure to enable it by adding `pipelineruns.tekton.dev` to the external frameworks.
+The controller is currently tested with Kueue v0.16.x.
+If you already have Kueue installed, make sure to enable it by adding `pipelineruns.tekton.dev` to the external frameworks.
 Otherwise you can install it with:
 
 ```sh
@@ -474,13 +475,13 @@ In addition, the tekton-kueue webhook server exposes custom Prometheus metrics f
 
 ## Project Distribution
 
-Release images are published to [ghcr.io/tektoncd/tekton-kueue](https://github.com/tektoncd/tekton-kueue/pkgs/container/tekton-kueue).
+Release automation targets `ghcr.io/tektoncd/tekton-kueue`. See the
+[GitHub releases](https://github.com/tektoncd/tekton-kueue/releases) for available artifacts.
 
 ## Contributing
 
-**NOTE:** Run `make help` for more information on all potential `make` targets.
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and
+[DEVELOPMENT.md](DEVELOPMENT.md) for local build and test instructions.
 
 
 [Tekton]: <https://tekton.dev/> "Tekton"

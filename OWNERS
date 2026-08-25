@@ -1,4 +1,7 @@
-# See the OWNERS docs: https://go.k8s.io/owners
+# The OWNERS file is used by Prow to select reviewers and approvers.
 
 approvers:
-- konflux-infra-team
+- tekton-kueue-maintainers
+
+reviewers:
+- tekton-kueue-collaborators
