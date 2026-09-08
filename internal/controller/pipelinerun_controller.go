@@ -252,10 +252,20 @@ func (p *PipelineRun) parseResourcesRequestsAnnotation(k, v string) (*corev1.Res
 			fmt.Sprintf("empty resource name in annotation %s", k))
 	}
 
+	if corev1.ResourceName(t) == ResourcePipelineRunCount {
+		return nil, nil, jobframework.UnretryableError(
+			fmt.Sprintf("overriding the concurrency token %q via annotation is not allowed", ResourcePipelineRunCount))
+	}
+
 	q, err := resource.ParseQuantity(v)
 	if err != nil {
 		return nil, nil, jobframework.UnretryableError(
 			fmt.Sprintf("invalid resource quantity in annotation %s=%q: %v", k, v, err))
+	}
+
+	if q.Sign() < 0 {
+		return nil, nil, jobframework.UnretryableError(
+			fmt.Sprintf("negative resource quantity in annotation %s=%q is not allowed", k, v))
 	}
 
 	return ptr.To(corev1.ResourceName(t)), &q, nil

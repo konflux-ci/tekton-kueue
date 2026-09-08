@@ -341,6 +341,34 @@ var _ = Describe("PipelineRun", func() {
 			))
 			Expect(requests).To(BeNil())
 		})
+
+		It("should return unretryable error when attempting to override the concurrency token", func() {
+			p := newTestPipelineRun(func(plr *tekv1.PipelineRun) {
+				plr.Annotations = map[string]string{
+					"kueue.konflux-ci.dev/requests-tekton.dev/pipelineruns": "0",
+				}
+			})
+			requests, err := p.resourcesRequests()
+			Expect(err).To(And(
+				MatchError(ContainSubstring("overriding the concurrency token")),
+				Satisfy(jobframework.IsUnretryableError),
+			))
+			Expect(requests).To(BeNil())
+		})
+
+		It("should return unretryable error when annotation value is negative", func() {
+			p := newTestPipelineRun(func(plr *tekv1.PipelineRun) {
+				plr.Annotations = map[string]string{
+					"kueue.konflux-ci.dev/requests-cpu": "-1",
+				}
+			})
+			requests, err := p.resourcesRequests()
+			Expect(err).To(And(
+				MatchError(ContainSubstring("negative resource quantity")),
+				Satisfy(jobframework.IsUnretryableError),
+			))
+			Expect(requests).To(BeNil())
+		})
 	})
 
 	Describe("PodSets", func() {
