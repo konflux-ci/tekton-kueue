@@ -1,4 +1,6 @@
 # tekton-kueue
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ftektoncd%2Ftekton-kueue.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Ftektoncd%2Ftekton-kueue?ref=badge_shield)
+
 
 Controller for integrating [Tekton] with [Kueue].
 
@@ -489,3 +491,7 @@ More information can be found via the [Kubebuilder Documentation](https://book.k
 [ClusterQueue]: <https://kueue.sigs.k8s.io/docs/concepts/cluster_queue/> "ClusterQueue"
 [LocalQueue]: <https://kueue.sigs.k8s.io/docs/concepts/local_queue/> "LocalQueue"
 [Workload]: <https://kueue.sigs.k8s.io/docs/concepts/workload/> "Workload"
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ftektoncd%2Ftekton-kueue.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Ftektoncd%2Ftekton-kueue?ref=badge_large)
